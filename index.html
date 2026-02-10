@@ -7,6 +7,28 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+    <!-- Login Gate -->
+    <div id="login-gate" class="login-gate">
+        <div class="login-container">
+            <img src="cowaglogo.png" alt="Company Logo" class="login-logo">
+            <h2>Gas Orders System</h2>
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="login-email">Email</label>
+                    <input type="email" id="login-email" required autocomplete="email">
+                </div>
+                <div class="form-group">
+                    <label for="login-password">Password</label>
+                    <input type="password" id="login-password" required autocomplete="current-password">
+                </div>
+                <button type="submit" class="login-btn">Login</button>
+                <div id="login-error" class="login-error"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main App (hidden until logged in) -->
+    <div id="main-app" class="main-app" style="display: none;">
     <div class="container">
         <header>
             <img src="cowaglogo.png" alt="Company Logo" class="header-logo">
@@ -383,6 +405,33 @@
                 </div>
             </section>
         </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
+        import { getAuth } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+        import { getFirestore } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCrk6FhryTT_isTw8l5eOV4moSU5dH8ygg",
+            authDomain: "gas-orders.firebaseapp.com",
+            projectId: "gas-orders",
+            storageBucket: "gas-orders.firebasestorage.app",
+            messagingSenderId: "803594044209",
+            appId: "1:803594044209:web:14e3e2608d8c94d824a610"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // expose globally for app.js
+        window.firebaseApp = app;
+        window.firebaseAuth = auth;
+        window.firebaseDB = db;
+    </script>
+
+    </div>
     </div>
 
     <script src="app.js"></script>

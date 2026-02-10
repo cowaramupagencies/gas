@@ -985,8 +985,56 @@ select#assign-run:focus {
 .generated-runs-list-collapsible {
     display: flex;
     flex-direction: column;
-    gap: var(--space-sm);
+    gap: var(--space-md);
     margin-top: var(--space-lg);
+}
+
+.month-section {
+    background: var(--neutral-50);
+    border: var(--border-width) solid var(--border-color);
+    border-radius: var(--border-radius-md);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+}
+
+.month-header-collapsible {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-lg);
+    cursor: pointer;
+    background: var(--brand-600);
+    color: var(--neutral-50);
+    transition: background-color var(--transition-base);
+    gap: var(--space-md);
+}
+
+.month-header-collapsible:hover {
+    background: var(--brand-700);
+}
+
+.month-title {
+    font-size: var(--font-size-xl);
+    font-weight: 600;
+    flex: 1;
+}
+
+.month-run-count {
+    font-size: var(--font-size-sm);
+    opacity: 0.9;
+}
+
+.toggle-icon-month {
+    font-size: var(--font-size-xl);
+    transition: transform var(--transition-base);
+}
+
+.month-runs-container {
+    padding: var(--space-md);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    background: var(--neutral-100);
 }
 
 .generated-run-item-collapsible {
@@ -2313,4 +2361,83 @@ select#assign-run:focus {
 
 .not-delivered-badge {
     color: var(--neutral-500);
+}
+
+/* ============================================================================
+   LOGIN GATE STYLES
+   ============================================================================ */
+
+.login-gate {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--neutral-100);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.login-container {
+    background: var(--neutral-50);
+    padding: var(--space-3xl);
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-lg);
+    max-width: 400px;
+    width: 100%;
+    text-align: center;
+}
+
+.login-logo {
+    max-width: 200px;
+    max-height: 80px;
+    margin-bottom: var(--space-lg);
+}
+
+.login-container h2 {
+    margin-bottom: var(--space-xl);
+    color: var(--brand-600);
+}
+
+.login-container .form-group {
+    margin-bottom: var(--space-lg);
+    text-align: left;
+}
+
+.login-container input {
+    width: 100%;
+    padding: var(--space-md);
+    border: var(--border-width) solid var(--border-color);
+    border-radius: var(--border-radius-sm);
+    font-size: var(--font-size-base);
+}
+
+.login-btn {
+    width: 100%;
+    padding: var(--space-md);
+    background: var(--brand-600);
+    color: var(--neutral-50);
+    border: none;
+    border-radius: var(--border-radius-sm);
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color var(--transition-base);
+}
+
+.login-btn:hover {
+    background: var(--brand-700);
+}
+
+.login-error {
+    margin-top: var(--space-md);
+    color: var(--status-danger);
+    font-size: var(--font-size-sm);
+    min-height: 20px;
+}
+
+.main-app {
+    width: 100%;
 }

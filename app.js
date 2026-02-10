@@ -1,72 +1,371 @@
-// Gas Bottle Order Entry System - V1
-// Local-first order entry system using localStorage
+// Gas Bottle Order Entry System - V2
+// Firebase-backed order entry system using Firestore
 
-// Data storage keys
-const STORAGE_KEYS = {
-    CUSTOMERS: 'gasOrders_customers',
-    ORDERS: 'gasOrders_orders',
-    RUNS: 'gasOrders_runs',
-    MANIFESTS: 'gasOrders_manifests'
-};
+// ============================================================================
+// FIREBASE AUTHENTICATION
+// ============================================================================
 
-// Initialize data structures if they don't exist
-function initializeStorage() {
-    if (!localStorage.getItem(STORAGE_KEYS.CUSTOMERS)) {
-        localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify([]));
+let auth = null;
+let db = null;
+
+// Wait for Firebase to be available
+function waitForFirebase() {
+    return new Promise((resolve) => {
+        if (window.firebaseAuth && window.firebaseDB) {
+            auth = window.firebaseAuth;
+            db = window.firebaseDB;
+            resolve();
+        } else {
+            setTimeout(() => waitForFirebase().then(resolve), 100);
+        }
+    });
+}
+
+// Check auth state and show/hide UI
+function checkAuthState() {
+    if (!auth) return;
+    
+    auth.onAuthStateChanged((user) => {
+        const loginGate = document.getElementById('login-gate');
+        const mainApp = document.getElementById('main-app');
+        
+        if (user) {
+            // User is logged in
+            if (loginGate) loginGate.style.display = 'none';
+            if (mainApp) mainApp.style.display = 'block';
+            initializeApp();
+        } else {
+            // User is not logged in
+            if (loginGate) loginGate.style.display = 'flex';
+            if (mainApp) mainApp.style.display = 'none';
+        }
+    });
+}
+
+// Handle login form submission
+async function handleLogin(email, password) {
+    if (!auth) {
+        showLoginError('Firebase not initialized. Please refresh the page.');
+        return;
     }
-    if (!localStorage.getItem(STORAGE_KEYS.ORDERS)) {
-        localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify([]));
-    }
-    if (!localStorage.getItem(STORAGE_KEYS.RUNS)) {
-        localStorage.setItem(STORAGE_KEYS.RUNS, JSON.stringify([]));
-    }
-    if (!localStorage.getItem(STORAGE_KEYS.MANIFESTS)) {
-        localStorage.setItem(STORAGE_KEYS.MANIFESTS, JSON.stringify([]));
+    
+    try {
+        const { signInWithEmailAndPassword } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js');
+        await signInWithEmailAndPassword(auth, email, password);
+        // Auth state change will handle UI update
+    } catch (error) {
+        showLoginError(error.message || 'Login failed. Please check your credentials.');
     }
 }
 
-// Get all customers from storage
+function showLoginError(message) {
+    const errorEl = document.getElementById('login-error');
+    if (errorEl) {
+        errorEl.textContent = message;
+    }
+}
+
+// ============================================================================
+// FIRESTORE DATA ACCESS LAYER
+// ============================================================================
+
+// In-memory state (updated by real-time listeners)
+let customersState = [];
+let ordersState = [];
+let runsState = [];
+let manifestsState = [];
+
+// Load customers from Firestore
+async function loadCustomers() {
+    if (!db) return [];
+    try {
+        const { collection, getDocs } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js');
+        const snapshot = await getDocs(collection(db, 'customers'));
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+        console.error('Error loading customers:', error);
+        return [];
+    }
+}
+
+// Save customer to Firestore
+async function saveCustomer(customer) {
+    if (!db) return;
+    try {
+        const { doc, setDoc } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js');
+        const customerRef = doc(db, 'customers', customer.id);
+        await setDoc(customerRef, customer);
+    } catch (error) {
+        console.error('Error saving customer:', error);
+        throw error;
+    }
+}
+
+// Load orders from Firestore
+async function loadOrders() {
+    if (!db) return [];
+    try {
+        const { collection, getDocs } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js');
+        const snapshot = await getDocs(collection(db, 'orders'));
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+        console.error('Error loading orders:', error);
+        return [];
+    }
+}
+
+// Save order to Firestore
+async function saveOrder(order) {
+    if (!db) return;
+    try {
+        const { doc, setDoc } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js');
+        const orderRef = doc(db, 'orders', order.id);
+        await setDoc(orderRef, order);
+    } catch (error) {
+        console.error('Error saving order:', error);
+        throw error;
+    }
+}
+
+// Load runs from Firestore
+async function loadRuns() {
+    if (!db) return [];
+    try {
+        const { collection, getDocs } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js');
+        const snapshot = await getDocs(collection(db, 'runs'));
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+        console.error('Error loading runs:', error);
+        return [];
+    }
+}
+
+// Save run to Firestore
+async function saveRun(run) {
+    if (!db) return;
+    try {
+        const { doc, setDoc } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js');
+        const runRef = doc(db, 'runs', run.id);
+        await setDoc(runRef, run);
+    } catch (error) {
+        console.error('Error saving run:', error);
+        throw error;
+    }
+}
+
+// Load manifests from Firestore
+async function loadManifests() {
+    if (!db) return [];
+    try {
+        const { collection, getDocs } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js');
+        const snapshot = await getDocs(collection(db, 'manifests'));
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+        console.error('Error loading manifests:', error);
+        return [];
+    }
+}
+
+// Save manifest to Firestore
+async function saveManifest(manifest) {
+    if (!db) return;
+    try {
+        const { doc, setDoc } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js');
+        const manifestRef = doc(db, 'manifests', manifest.id);
+        await setDoc(manifestRef, manifest);
+    } catch (error) {
+        console.error('Error saving manifest:', error);
+        throw error;
+    }
+}
+
+// Delete document from Firestore
+async function deleteDocument(collectionName, docId) {
+    if (!db) return;
+    try {
+        const { doc, deleteDoc } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js');
+        const docRef = doc(db, collectionName, docId);
+        await deleteDoc(docRef);
+    } catch (error) {
+        console.error(`Error deleting ${collectionName}:`, error);
+        throw error;
+    }
+}
+
+// ============================================================================
+// COMPATIBILITY LAYER (get/save functions for existing code)
+// ============================================================================
+
+// Get all customers (from in-memory state)
 function getCustomers() {
-    const data = localStorage.getItem(STORAGE_KEYS.CUSTOMERS);
-    return data ? JSON.parse(data) : [];
+    return customersState;
 }
 
-// Save customers to storage
-function saveCustomers(customers) {
-    localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
+// Save customers (updates all customers - for batch operations)
+async function saveCustomers(customers) {
+    if (!db) return;
+    try {
+        const { doc, setDoc } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js');
+        const promises = customers.map(customer => {
+            const customerRef = doc(db, 'customers', customer.id);
+            return setDoc(customerRef, customer);
+        });
+        await Promise.all(promises);
+    } catch (error) {
+        console.error('Error saving customers:', error);
+        throw error;
+    }
 }
 
-// Get all orders from storage
+// Get all orders (from in-memory state)
 function getOrders() {
-    const data = localStorage.getItem(STORAGE_KEYS.ORDERS);
-    return data ? JSON.parse(data) : [];
+    return ordersState;
 }
 
-// Save orders to storage
-function saveOrders(orders) {
-    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+// Save orders (updates all orders - for batch operations)
+async function saveOrders(orders) {
+    if (!db) return;
+    try {
+        const { doc, setDoc } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js');
+        const promises = orders.map(order => {
+            const orderRef = doc(db, 'orders', order.id);
+            return setDoc(orderRef, order);
+        });
+        await Promise.all(promises);
+    } catch (error) {
+        console.error('Error saving orders:', error);
+        throw error;
+    }
 }
 
-// Get all runs from storage
+// Get all runs (from in-memory state)
 function getRuns() {
-    const data = localStorage.getItem(STORAGE_KEYS.RUNS);
-    return data ? JSON.parse(data) : [];
+    return runsState;
 }
 
-// Save runs to storage
-function saveRuns(runs) {
-    localStorage.setItem(STORAGE_KEYS.RUNS, JSON.stringify(runs));
+// Save runs (updates all runs - for batch operations)
+async function saveRuns(runs) {
+    if (!db) return;
+    try {
+        const { doc, setDoc } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js');
+        const promises = runs.map(run => {
+            const runRef = doc(db, 'runs', run.id);
+            return setDoc(runRef, run);
+        });
+        await Promise.all(promises);
+    } catch (error) {
+        console.error('Error saving runs:', error);
+        throw error;
+    }
 }
 
-// Get all manifests from storage
+// Get all manifests (from in-memory state)
 function getManifests() {
-    const data = localStorage.getItem(STORAGE_KEYS.MANIFESTS);
-    return data ? JSON.parse(data) : [];
+    return manifestsState;
 }
 
-// Save manifests to storage
-function saveManifests(manifests) {
-    localStorage.setItem(STORAGE_KEYS.MANIFESTS, JSON.stringify(manifests));
+// Save manifests (updates all manifests - for batch operations)
+async function saveManifests(manifests) {
+    if (!db) return;
+    try {
+        const { doc, setDoc } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js');
+        const promises = manifests.map(manifest => {
+            const manifestRef = doc(db, 'manifests', manifest.id);
+            return setDoc(manifestRef, manifest);
+        });
+        await Promise.all(promises);
+    } catch (error) {
+        console.error('Error saving manifests:', error);
+        throw error;
+    }
+}
+
+// ============================================================================
+// REAL-TIME LISTENERS
+// ============================================================================
+
+let unsubscribeCustomers = null;
+let unsubscribeOrders = null;
+let unsubscribeRuns = null;
+let unsubscribeManifests = null;
+
+// Setup real-time listeners
+async function setupRealtimeListeners() {
+    if (!db) return;
+    
+    try {
+        const { collection, onSnapshot } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js');
+        
+        // Customers listener
+        unsubscribeCustomers = onSnapshot(collection(db, 'customers'), (snapshot) => {
+            customersState = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            // Trigger UI updates if needed
+            if (typeof renderUndeliveredOrders === 'function') {
+                const searchQuery = document.getElementById('undelivered-search')?.value || '';
+                renderUndeliveredOrders(searchQuery);
+            }
+        });
+        
+        // Orders listener
+        unsubscribeOrders = onSnapshot(collection(db, 'orders'), (snapshot) => {
+            ordersState = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            // Trigger UI updates
+            refreshAllViews();
+        });
+        
+        // Runs listener
+        unsubscribeRuns = onSnapshot(collection(db, 'runs'), (snapshot) => {
+            runsState = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            refreshAllViews();
+        });
+        
+        // Manifests listener
+        unsubscribeManifests = onSnapshot(collection(db, 'manifests'), (snapshot) => {
+            manifestsState = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            refreshAllViews();
+        });
+    } catch (error) {
+        console.error('Error setting up real-time listeners:', error);
+    }
+}
+
+// Refresh all views when data changes
+function refreshAllViews() {
+    // Refresh undelivered orders
+    if (typeof renderUndeliveredOrders === 'function') {
+        const searchQuery = document.getElementById('undelivered-search')?.value || '';
+        renderUndeliveredOrders(searchQuery);
+    }
+    
+    // Refresh run builder if visible
+    const runDate = document.getElementById('run-date')?.value;
+    if (runDate && typeof renderRunBuilder === 'function') {
+        renderRunBuilder(runDate);
+    }
+    
+    // Refresh generated runs if visible
+    if (typeof renderGeneratedRuns === 'function') {
+        renderGeneratedRuns();
+    }
+    
+    // Refresh stock count if visible
+    if (typeof renderStockCount === 'function') {
+        renderStockCount();
+    }
+    
+    // Refresh customer history if visible
+    if (typeof renderCustomerHistory === 'function') {
+        const searchQuery = document.getElementById('customer-history-search')?.value || '';
+        renderCustomerHistory(searchQuery);
+    }
+}
+
+// Cleanup listeners
+function cleanupListeners() {
+    if (unsubscribeCustomers) unsubscribeCustomers();
+    if (unsubscribeOrders) unsubscribeOrders();
+    if (unsubscribeRuns) unsubscribeRuns();
+    if (unsubscribeManifests) unsubscribeManifests();
 }
 
 // Generate a simple ID (timestamp-based)
@@ -81,40 +380,7 @@ function generateId() {
 const BOTTLE_TYPES = ['45kg', '8.5kg', 'Forklift 18kg', 'Forklift 15kg'];
 const MAX_BOTTLES_PER_RUN = 8; // Only 45kg bottles count toward this limit
 
-// Migrate existing orders to bottles + totalBottleCount (run once on load)
-function migrateOrdersToMultiBottle() {
-    const orders = getOrders();
-    let changed = false;
-    orders.forEach(order => {
-        if (order.bottles !== undefined && order.totalBottleCount !== undefined) {
-            // Ensure all bottle types exist (for orders created before new types added)
-            const bottles = order.bottles || {};
-            order.bottles = {
-                '45kg': bottles['45kg'] || 0,
-                '8.5kg': bottles['8.5kg'] || 0,
-                'Forklift 18kg': bottles['Forklift 18kg'] || 0,
-                'Forklift 15kg': bottles['Forklift 15kg'] || 0
-            };
-            // Recalculate totalBottleCount (drop any old 'Forklift' entries)
-            order.totalBottleCount = Object.values(order.bottles).reduce((sum, qty) => sum + (parseInt(qty, 10) || 0), 0);
-            changed = true;
-            return;
-        }
-        // Legacy: bottleType + quantity
-        const type = order.bottleType || '45kg';
-        const qty = Math.max(0, parseInt(order.quantity, 10) || 0);
-        order.bottles = {
-            '45kg': type === '45kg' ? qty : 0,
-            '8.5kg': type === '8.5kg' ? qty : 0,
-            'Forklift 18kg': type === 'Forklift 18kg' ? qty : 0,
-            'Forklift 15kg': type === 'Forklift 15kg' ? qty : 0
-        };
-        // If legacy order was 'Forklift', drop it (we removed that type)
-        order.totalBottleCount = qty;
-        changed = true;
-    });
-    if (changed) saveOrders(orders);
-}
+// Migration no longer needed - Firestore handles data structure directly
 
 // Get total bottle count for an order (works for both legacy and new format)
 function getOrderTotalBottles(order) {
@@ -296,8 +562,12 @@ function selectCustomer(customer) {
 }
 
 // Find or create customer
-function findOrCreateCustomer(name, mobile, address) {
+async function findOrCreateCustomer(name, mobile, address) {
     const customers = getCustomers();
+    // Ensure orderHistory exists for all customers
+    customers.forEach(c => {
+        if (!c.orderHistory) c.orderHistory = [];
+    });
     
     // Try to find existing customer by mobile (most reliable identifier)
     let customer = customers.find(c => 
@@ -308,6 +578,7 @@ function findOrCreateCustomer(name, mobile, address) {
         // Update existing customer details if they've changed
         customer.name = name;
         customer.address = address;
+        await saveCustomer(customer);
     } else {
         // Create new customer
         customer = {
@@ -316,17 +587,17 @@ function findOrCreateCustomer(name, mobile, address) {
             mobile: mobile.trim(),
             address: address.trim(),
             notes: '',
-            orderHistory: []
+            orderHistory: [],
+            createdAt: new Date().toISOString()
         };
-        customers.push(customer);
+        await saveCustomer(customer);
     }
     
-    saveCustomers(customers);
     return customer;
 }
 
 // Update customer notes
-function updateCustomerNotes(customerId, notes) {
+async function updateCustomerNotes(customerId, notes) {
     const customers = getCustomers();
     const customer = customers.find(c => c.id === customerId);
     
@@ -337,7 +608,7 @@ function updateCustomerNotes(customerId, notes) {
         } else {
             customer.notes = notes.trim();
         }
-        saveCustomers(customers);
+        await saveCustomer(customer);
     }
 }
 
@@ -408,7 +679,7 @@ function validateForm() {
 }
 
 // Save order
-function saveOrder() {
+async function handleSaveOrder() {
     if (!validateForm()) {
         return;
     }
@@ -451,7 +722,7 @@ function saveOrder() {
     }
     
     // Find or create customer
-    const customer = findOrCreateCustomer(name, mobile, address);
+    const customer = await findOrCreateCustomer(name, mobile, address);
     
     // Create order
     const order = {
@@ -471,23 +742,30 @@ function saveOrder() {
         createdAt: new Date().toISOString()
     };
     
-    // Save order
-    const orders = getOrders();
-    orders.push(order);
-    saveOrders(orders);
+    // Save order to Firestore
+    await saveOrder(order);
     
     // Update customer order history
+    customer.orderHistory = customer.orderHistory || [];
     customer.orderHistory.push(order.id);
-    const customers = getCustomers();
-    const customerIndex = customers.findIndex(c => c.id === customer.id);
-    if (customerIndex !== -1) {
-        customers[customerIndex] = customer;
-        saveCustomers(customers);
-    }
+    await saveCustomer(customer);
     
     // Update customer notes if order notes provided
     if (orderNotes) {
-        updateCustomerNotes(customer.id, orderNotes);
+        await updateCustomerNotes(customer.id, orderNotes);
+    }
+    
+    // Update run if assigned
+    if (runId) {
+        const runs = getRuns();
+        const run = runs.find(r => r.id === runId);
+        if (run) {
+            if (!run.orderIds) run.orderIds = [];
+            if (!run.orderIds.includes(order.id)) {
+                run.orderIds.push(order.id);
+                await saveRun(run);
+            }
+        }
     }
     
     showMessage('Order saved successfully!', 'success');
@@ -849,7 +1127,7 @@ function renderUnassignedOrders(orders, date) {
 }
 
 // Create new run
-function createNewRun(date) {
+async function createNewRun(date) {
     const runs = getRuns().filter(r => r.deliveryDate === date);
     const runNumber = runs.length + 1;
     
@@ -865,15 +1143,13 @@ function createNewRun(date) {
         createdAt: new Date().toISOString()
     };
     
-    const allRuns = getRuns();
-    allRuns.push(run);
-    saveRuns(allRuns);
+    await saveRun(run);
     
     renderRunBuilder(date);
 }
 
 // Assign order to run
-function assignOrderToRun(orderId, runId) {
+async function assignOrderToRun(orderId, runId) {
     if (!runId) return;
     
     const orders = getOrders();
@@ -899,12 +1175,13 @@ function assignOrderToRun(orderId, runId) {
     order.status = 'Assigned';
     
     // Update run
+    if (!run.orderIds) run.orderIds = [];
     if (!run.orderIds.includes(orderId)) {
         run.orderIds.push(orderId);
     }
     
-    saveOrders(orders);
-    saveRuns(runs);
+    await saveOrder(order);
+    await saveRun(run);
     
     const date = document.getElementById('run-date').value;
     renderRunBuilder(date);
@@ -915,7 +1192,7 @@ function assignOrderToRun(orderId, runId) {
 }
 
 // Remove run
-function removeRun(runId) {
+async function removeRun(runId) {
     if (!confirm('Remove this run? Orders will be unassigned.')) return;
     
     const runs = getRuns();
@@ -924,18 +1201,19 @@ function removeRun(runId) {
     
     // Unassign orders
     const orders = getOrders();
+    const updatePromises = [];
     orders.forEach(order => {
         if (order.runId === runId) {
             order.runId = null;
             order.status = 'Unassigned';
+            updatePromises.push(saveOrder(order));
         }
     });
     
-    // Remove run
-    const filteredRuns = runs.filter(r => r.id !== runId);
+    await Promise.all(updatePromises);
     
-    saveOrders(orders);
-    saveRuns(filteredRuns);
+    // Delete run from Firestore
+    await deleteDocument('runs', runId);
     
     const date = document.getElementById('run-date').value;
     renderRunBuilder(date);
@@ -946,7 +1224,7 @@ function removeRun(runId) {
 }
 
 // Generate manifest
-function generateManifest(runId) {
+async function generateManifest(runId) {
     const runs = getRuns();
     const run = runs.find(r => r.id === runId);
     if (!run) return;
@@ -964,6 +1242,7 @@ function generateManifest(runId) {
     if (activeManifest) {
         activeManifest.status = 'SUPERSEDED';
         activeManifest.supersededAt = new Date().toISOString();
+        await saveManifest(activeManifest);
     }
     
     // Create new manifest with current run orders
@@ -1022,9 +1301,8 @@ function generateManifest(runId) {
         run.status = 'Pending';
     }
     
-    manifests.push(manifest);
-    saveManifests(manifests);
-    saveRuns(runs);
+    await saveManifest(manifest);
+    await saveRun(run);
     
     downloadManifestPDF(manifest);
     
@@ -1740,35 +2018,77 @@ function renderGeneratedRuns() {
     
     const orders = getOrders();
     
+    // Group runs by month
+    const runsByMonth = {};
+    runs.forEach(run => {
+        const date = new Date(run.deliveryDate + 'T00:00:00');
+        const year = date.getFullYear();
+        const month = date.getMonth();
+        const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
+        const monthLabel = date.toLocaleDateString('en-AU', { year: 'numeric', month: 'long' });
+        
+        if (!runsByMonth[monthKey]) {
+            runsByMonth[monthKey] = {
+                label: monthLabel,
+                runs: []
+            };
+        }
+        runsByMonth[monthKey].runs.push(run);
+    });
+    
+    // Sort months (newest first) by key
+    const sortedMonths = Object.keys(runsByMonth).sort((a, b) => b.localeCompare(a));
+    
     let html = '<div class="generated-runs-list-collapsible">';
     
-    runs.forEach(run => {
-        const manifest = getActiveManifestForRun(run.id);
-        const runOrders = orders.filter(o => o.runId === run.id);
-        const totalBottles = runOrders.reduce((sum, o) => sum + getOrderTotalBottles(o), 0);
-        const deliveredBottles = runOrders.filter(o => o.delivered).reduce((sum, o) => sum + getOrderTotalBottles(o), 0);
-        const status = calculateRunStatus(run);
-        const manifestId = manifest ? manifest.id.substring(0, 8).toUpperCase() : 'N/A';
-        const version = manifest ? (manifest.version || 1) : null;
+    sortedMonths.forEach(monthKey => {
+        const monthData = runsByMonth[monthKey];
+        const monthRuns = monthData.runs;
+        const monthId = monthKey.replace(/\s+/g, '-').toLowerCase();
         
         html += `
-            <div class="generated-run-item-collapsible">
-                <div class="run-item-header-collapsible" onclick="toggleGeneratedRun('${run.id}')">
-                    <span class="run-item-title">${formatDate(run.deliveryDate)} - Run ${run.runNumber}</span>
-                    <span class="run-status-badge status-${status.toLowerCase().replace(' ', '-')}">${status}</span>
-                    <span class="toggle-icon-run" id="toggle-run-${run.id}">▸</span>
+            <div class="month-section">
+                <div class="month-header-collapsible" onclick="toggleMonthRuns('${monthId}')">
+                    <span class="month-title">${monthData.label}</span>
+                    <span class="month-run-count">${monthRuns.length} run${monthRuns.length !== 1 ? 's' : ''}</span>
+                    <span class="toggle-icon-month" id="toggle-month-${monthId}">▸</span>
                 </div>
-                <div class="run-item-details-collapsible" id="run-details-${run.id}" style="display: none;">
-                    <div class="run-card-info">
-                        <div><strong>Manifest ID:</strong> ${manifestId}${version ? ` (v${version})` : ''}</div>
-                        <div><strong>Status:</strong> <span class="manifest-status-badge status-active">ACTIVE</span></div>
-                        <div><strong>Bottles:</strong> ${deliveredBottles} / ${totalBottles} delivered</div>
-                        <div><strong>Stops:</strong> ${runOrders.length}</div>
+                <div class="month-runs-container" id="month-runs-${monthId}" style="display: none;">
+        `;
+        
+        monthRuns.forEach(run => {
+            const manifest = getActiveManifestForRun(run.id);
+            const runOrders = orders.filter(o => o.runId === run.id);
+            const totalBottles = runOrders.reduce((sum, o) => sum + getOrderTotalBottles(o), 0);
+            const deliveredBottles = runOrders.filter(o => o.delivered).reduce((sum, o) => sum + getOrderTotalBottles(o), 0);
+            const status = calculateRunStatus(run);
+            const manifestId = manifest ? manifest.id.substring(0, 8).toUpperCase() : 'N/A';
+            const version = manifest ? (manifest.version || 1) : null;
+            
+            html += `
+                <div class="generated-run-item-collapsible">
+                    <div class="run-item-header-collapsible" onclick="toggleGeneratedRun('${run.id}')">
+                        <span class="run-item-title">${formatDate(run.deliveryDate)} - Run ${run.runNumber}</span>
+                        <span class="run-status-badge status-${status.toLowerCase().replace(' ', '-')}">${status}</span>
+                        <span class="toggle-icon-run" id="toggle-run-${run.id}">▸</span>
                     </div>
-                    <div class="run-card-actions">
-                        <button class="view-run-btn" onclick="viewRunDetail('${run.id}')">View Run</button>
-                        ${manifest ? `<button class="download-manifest-btn" onclick="downloadManifestPDF(getManifestById('${manifest.id}'))">Download Manifest</button>` : ''}
+                    <div class="run-item-details-collapsible" id="run-details-${run.id}" style="display: none;">
+                        <div class="run-card-info">
+                            <div><strong>Manifest ID:</strong> ${manifestId}${version ? ` (v${version})` : ''}</div>
+                            <div><strong>Status:</strong> <span class="manifest-status-badge status-active">ACTIVE</span></div>
+                            <div><strong>Bottles:</strong> ${deliveredBottles} / ${totalBottles} delivered</div>
+                            <div><strong>Stops:</strong> ${runOrders.length}</div>
+                        </div>
+                        <div class="run-card-actions">
+                            <button class="view-run-btn" onclick="viewRunDetail('${run.id}')">View Run</button>
+                            ${manifest ? `<button class="download-manifest-btn" onclick="downloadManifestPDF(getManifestById('${manifest.id}'))">Download Manifest</button>` : ''}
+                        </div>
                     </div>
+                </div>
+            `;
+        });
+        
+        html += `
                 </div>
             </div>
         `;
@@ -1776,6 +2096,20 @@ function renderGeneratedRuns() {
     
     html += '</div>';
     container.innerHTML = html;
+}
+
+// Toggle month runs visibility
+function toggleMonthRuns(monthId) {
+    const monthRunsDiv = document.getElementById('month-runs-' + monthId);
+    const toggleIcon = document.getElementById('toggle-month-' + monthId);
+    
+    if (monthRunsDiv.style.display === 'none') {
+        monthRunsDiv.style.display = 'block';
+        toggleIcon.textContent = '▾';
+    } else {
+        monthRunsDiv.style.display = 'none';
+        toggleIcon.textContent = '▸';
+    }
 }
 
 // Toggle generated run details
@@ -1941,7 +2275,7 @@ function overrideManifest(runId) {
 }
 
 // Toggle delivery status (only works with ACTIVE manifest)
-function toggleDelivery(orderId, runId, delivered) {
+async function toggleDelivery(orderId, runId, delivered) {
     const orders = getOrders();
     const order = orders.find(o => o.id === orderId);
     if (!order) return;
@@ -1972,7 +2306,7 @@ function toggleDelivery(orderId, runId, delivered) {
         order.status = 'Assigned';
     }
     
-    saveOrders(orders);
+    await saveOrder(order);
     
     // Update run status
     updateRunStatus(runId);
@@ -1986,7 +2320,7 @@ function toggleDelivery(orderId, runId, delivered) {
 }
 
 // Mark run as complete
-function markRunComplete(runId) {
+async function markRunComplete(runId) {
     if (!confirm('Mark this run as complete? This will lock all delivery states.')) {
         return;
     }
@@ -2011,10 +2345,10 @@ function markRunComplete(runId) {
     const activeManifest = manifests.find(m => m.runId === runId && m.status === 'ACTIVE');
     if (activeManifest) {
         activeManifest.status = 'COMPLETED';
-        saveManifests(manifests);
+        await saveManifest(activeManifest);
     }
     
-    saveRuns(runs);
+    await saveRun(run);
     
     // Refresh detail view
     viewRunDetail(runId);
@@ -2068,12 +2402,23 @@ function rescheduleOrder(orderId, runId) {
     showMessage('Order rescheduled and returned to undelivered queue', 'success');
 }
 
-// Make functions globally available
+// Make functions globally available (for onclick handlers in HTML)
 window.viewRunDetail = viewRunDetail;
 window.toggleDelivery = toggleDelivery;
 window.markRunComplete = markRunComplete;
 window.rescheduleOrder = rescheduleOrder;
 window.getManifestById = getManifestById;
+window.generateManifest = generateManifest;
+window.assignDeliveryDateToOrder = assignDeliveryDateToOrder;
+window.openEditOrderModal = openEditOrderModal;
+window.closeEditOrderModal = closeEditOrderModal;
+window.saveEditedOrder = saveEditedOrder;
+window.toggleCustomerOrders = toggleCustomerOrders;
+window.toggleGeneratedRun = toggleGeneratedRun;
+window.toggleMonthRuns = toggleMonthRuns;
+window.assignOrderToRun = assignOrderToRun;
+window.removeRun = removeRun;
+window.createNewRun = createNewRun;
 window.downloadManifestPDF = downloadManifestPDF;
 window.overrideManifest = overrideManifest;
 
@@ -2081,18 +2426,50 @@ window.overrideManifest = overrideManifest;
 // RESET DATA FUNCTION (TESTING ONLY)
 // ============================================
 
-function resetAllData() {
+async function resetAllData() {
     if (!confirm('This will delete all customers and orders. Continue?')) {
         return;
     }
     
-    // Clear all app-related localStorage
-    Object.values(STORAGE_KEYS).forEach(key => {
-        localStorage.removeItem(key);
-    });
+    // Delete all Firestore documents
+    if (!db) {
+        alert('Firebase not initialized');
+        return;
+    }
     
-    // Reload page
-    window.location.reload();
+    try {
+        const { collection, getDocs, deleteDoc, doc } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js');
+        
+        // Delete all customers
+        const customersSnapshot = await getDocs(collection(db, 'customers'));
+        for (const docSnap of customersSnapshot.docs) {
+            await deleteDoc(doc(db, 'customers', docSnap.id));
+        }
+        
+        // Delete all orders
+        const ordersSnapshot = await getDocs(collection(db, 'orders'));
+        for (const docSnap of ordersSnapshot.docs) {
+            await deleteDoc(doc(db, 'orders', docSnap.id));
+        }
+        
+        // Delete all runs
+        const runsSnapshot = await getDocs(collection(db, 'runs'));
+        for (const docSnap of runsSnapshot.docs) {
+            await deleteDoc(doc(db, 'runs', docSnap.id));
+        }
+        
+        // Delete all manifests
+        const manifestsSnapshot = await getDocs(collection(db, 'manifests'));
+        for (const docSnap of manifestsSnapshot.docs) {
+            await deleteDoc(doc(db, 'manifests', docSnap.id));
+        }
+        
+        alert('All data has been reset.');
+        window.location.reload();
+    } catch (error) {
+        console.error('Error resetting data:', error);
+        alert('Error resetting data: ' + error.message);
+    }
 }
 
 // ============================================
@@ -2434,7 +2811,7 @@ function validateEditForm() {
 }
 
 // Save edited order
-function saveEditedOrder() {
+async function saveEditedOrder() {
     if (!validateEditForm()) {
         return;
     }
@@ -2466,10 +2843,10 @@ function saveEditedOrder() {
         customer.name = name;
         customer.mobile = mobile;
         customer.address = address;
-        saveCustomers(customers);
+        await saveCustomer(customer);
     } else {
         // Create new customer if not found
-        customer = findOrCreateCustomer(name, mobile, address);
+        customer = await findOrCreateCustomer(name, mobile, address);
         order.customerId = customer.id;
     }
     
@@ -2517,22 +2894,26 @@ function saveEditedOrder() {
             const oldRun = runs.find(r => r.id === oldRunId);
             if (oldRun && oldRun.orderIds) {
                 oldRun.orderIds = oldRun.orderIds.filter(id => id !== orderId);
+                await saveRun(oldRun);
             }
         }
         if (runId) {
             const newRun = runs.find(r => r.id === runId);
-            if (newRun && !newRun.orderIds.includes(orderId)) {
-                newRun.orderIds.push(orderId);
+            if (newRun) {
+                if (!newRun.orderIds) newRun.orderIds = [];
+                if (!newRun.orderIds.includes(orderId)) {
+                    newRun.orderIds.push(orderId);
+                }
+                await saveRun(newRun);
             }
         }
-        saveRuns(runs);
     }
     
-    saveOrders(orders);
+    await saveOrder(order);
     
     // Update customer notes if order notes provided
     if (orderNotes) {
-        updateCustomerNotes(customer.id, orderNotes);
+        await updateCustomerNotes(customer.id, orderNotes);
     }
     
     // Close modal
@@ -2695,7 +3076,7 @@ function toggleCustomerOrders(customerId) {
 }
 
 // Assign delivery date to an order
-function assignDeliveryDateToOrder(orderId, deliveryDate) {
+async function assignDeliveryDateToOrder(orderId, deliveryDate) {
     const orders = getOrders();
     const order = orders.find(o => o.id === orderId);
     
@@ -2724,9 +3105,8 @@ function assignDeliveryDateToOrder(orderId, deliveryDate) {
                 // Remove order from old run's orderIds if it exists
                 if (oldRun.orderIds && oldRun.orderIds.includes(orderId)) {
                     oldRun.orderIds = oldRun.orderIds.filter(id => id !== orderId);
+                    await saveRun(oldRun);
                 }
-                
-                saveRuns(runs);
             }
         }
     } else {
@@ -2737,14 +3117,14 @@ function assignDeliveryDateToOrder(orderId, deliveryDate) {
             const run = runs.find(r => r.id === order.runId);
             if (run && run.orderIds && run.orderIds.includes(orderId)) {
                 run.orderIds = run.orderIds.filter(id => id !== orderId);
+                await saveRun(run);
             }
             order.runId = null;
             order.status = 'Unassigned';
-            saveRuns(runs);
         }
     }
     
-    saveOrders(orders);
+    await saveOrder(order);
     
     // Refresh the display
     const searchQuery = document.getElementById('undelivered-search')?.value || '';
@@ -2767,10 +3147,28 @@ function assignDeliveryDateToOrder(orderId, deliveryDate) {
 }
 
 // Initialize app when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-    // Initialize storage
-    initializeStorage();
-    migrateOrdersToMultiBottle();
+document.addEventListener('DOMContentLoaded', async () => {
+    // Wait for Firebase to be available
+    await waitForFirebase();
+    
+    // Set up auth state listener
+    checkAuthState();
+    
+    // Set up login form handler
+    const loginForm = document.getElementById('login-form');
+    if (loginForm) {
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+            await handleLogin(email, password);
+        });
+    }
+    
+    // Initialize app (only runs if user is logged in)
+    async function initializeApp() {
+        // Set up real-time listeners
+        await setupRealtimeListeners();
     
     // Customer search functionality
     const searchInput = document.getElementById('customer-search');
@@ -2837,13 +3235,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     // Save order button
-    document.getElementById('save-order').addEventListener('click', saveOrder);
+    document.getElementById('save-order').addEventListener('click', handleSaveOrder);
     
     // Allow Ctrl+Enter to save order from anywhere
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && e.ctrlKey) {
             e.preventDefault();
-            saveOrder();
+            handleSaveOrder();
         }
     });
     
@@ -2985,6 +3383,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.saveEditedOrder = saveEditedOrder;
     window.toggleCustomerOrders = toggleCustomerOrders;
     window.toggleGeneratedRun = toggleGeneratedRun;
+    window.toggleMonthRuns = toggleMonthRuns;
     
     // Edit form bottle quantity controls
     document.querySelectorAll('.bottle-qty-plus-edit').forEach(btn => {
@@ -3060,4 +3459,11 @@ document.addEventListener('DOMContentLoaded', () => {
     customerHistorySearchInput?.addEventListener('input', (e) => {
         renderCustomerHistory(e.target.value);
     });
+    
+    }
+    
+    // If already logged in, initialize immediately
+    if (auth && auth.currentUser) {
+        initializeApp();
+    }
 });
