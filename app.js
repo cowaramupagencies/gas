@@ -21,6 +21,9 @@ function waitForFirebase() {
     });
 }
 
+// Store initializeApp function reference
+let initializeAppFunction = null;
+
 // Check auth state and show/hide UI
 function checkAuthState() {
     if (!auth) return;
@@ -31,13 +34,42 @@ function checkAuthState() {
         
         if (user) {
             // User is logged in
-            if (loginGate) loginGate.style.display = 'none';
-            if (mainApp) mainApp.style.display = 'block';
-            initializeApp();
+            if (loginGate) {
+                loginGate.style.display = 'none';
+                loginGate.style.visibility = 'hidden';
+            }
+            if (mainApp) {
+                mainApp.style.display = 'block';
+                mainApp.style.visibility = 'visible';
+            }
+            // Call initializeApp if it's ready, otherwise wait for DOM
+            if (initializeAppFunction) {
+                setTimeout(() => initializeAppFunction(), 100);
+            } else {
+                // Wait for DOM to be ready
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', () => {
+                        setTimeout(() => {
+                            if (initializeAppFunction) initializeAppFunction();
+                        }, 100);
+                    });
+                } else {
+                    // DOM already ready, wait a bit for initializeApp to be set
+                    setTimeout(() => {
+                        if (initializeAppFunction) initializeAppFunction();
+                    }, 200);
+                }
+            }
         } else {
             // User is not logged in
-            if (loginGate) loginGate.style.display = 'flex';
-            if (mainApp) mainApp.style.display = 'none';
+            if (loginGate) {
+                loginGate.style.display = 'flex';
+                loginGate.style.visibility = 'visible';
+            }
+            if (mainApp) {
+                mainApp.style.display = 'none';
+                mainApp.style.visibility = 'hidden';
+            }
         }
     });
 }
@@ -3192,6 +3224,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Initialize app (only runs if user is logged in)
     async function initializeApp() {
+        // Prevent multiple initializations
+        if (window.appInitialized) return;
+        window.appInitialized = true;
+        
+        // Ensure main app is visible
+        const mainApp = document.getElementById('main-app');
+        if (mainApp) {
+            mainApp.style.display = 'block';
+        }
+        
+        // Small delay to ensure DOM is fully ready
+        await new Promise(resolve => setTimeout(resolve, 50));
+        
         // Set up real-time listeners
         await setupRealtimeListeners();
     
@@ -3277,16 +3322,34 @@ document.addEventListener('DOMContentLoaded', async () => {
     // MAIN VIEW TOGGLE (CUSTOMER / STAFF)
     // ============================================
     
+    // Wait a bit to ensure DOM is fully ready
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
     const customerViewBtn = document.getElementById('customer-view-btn');
     const staffViewBtn = document.getElementById('staff-view-btn');
     const customerView = document.getElementById('customer-view');
     const staffView = document.getElementById('staff-view');
     
+    // Ensure elements exist before setting up listeners
+    if (!customerViewBtn || !staffViewBtn || !customerView || !staffView) {
+        console.error('View toggle elements not found:', {
+            customerViewBtn: !!customerViewBtn,
+            staffViewBtn: !!staffViewBtn,
+            customerView: !!customerView,
+            staffView: !!staffView
+        });
+        return;
+    }
+    
     function switchToCustomerView() {
-        customerView.style.display = 'block';
-        staffView.style.display = 'none';
-        customerViewBtn.classList.add('active');
-        staffViewBtn.classList.remove('active');
+        if (customerView && staffView) {
+            customerView.style.display = 'block';
+            staffView.style.display = 'none';
+        }
+        if (customerViewBtn && staffViewBtn) {
+            customerViewBtn.classList.add('active');
+            staffViewBtn.classList.remove('active');
+        }
         // Focus on search input when switching to customer view
         setTimeout(() => {
             document.getElementById('customer-search')?.focus();
@@ -3294,10 +3357,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     
     function switchToStaffView() {
-        customerView.style.display = 'none';
-        staffView.style.display = 'block';
-        customerViewBtn.classList.remove('active');
-        staffViewBtn.classList.add('active');
+        if (customerView && staffView) {
+            customerView.style.display = 'none';
+            staffView.style.display = 'block';
+        }
+        if (customerViewBtn && staffViewBtn) {
+            customerViewBtn.classList.remove('active');
+            staffViewBtn.classList.add('active');
+        }
         // Load undelivered orders when switching to staff view (it's the default active tab)
         const activeTab = document.querySelector('.staff-tab.active')?.dataset.tab;
         if (activeTab === 'undelivered' || !activeTab) {
@@ -3305,8 +3372,32 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
     
-    customerViewBtn?.addEventListener('click', switchToCustomerView);
-    staffViewBtn?.addEventListener('click', switchToStaffView);
+    // Remove any existing listeners by cloning (clean slate)
+    const customerBtnParent = customerViewBtn.parentNode;
+    const staffBtnParent = staffViewBtn.parentNode;
+    
+    const newCustomerBtn = customerViewBtn.cloneNode(true);
+    customerBtnParent.replaceChild(newCustomerBtn, customerViewBtn);
+    
+    const newStaffBtn = staffViewBtn.cloneNode(true);
+    staffBtnParent.replaceChild(newStaffBtn, staffViewBtn);
+    
+    // Attach event listeners to the new nodes
+    newCustomerBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        switchToCustomerView();
+    });
+    
+    newStaffBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        switchToStaffView();
+    });
+    
+    // Make functions globally available for debugging
+    window.switchToCustomerView = switchToCustomerView;
+    window.switchToStaffView = switchToStaffView;
     
     // ============================================
     // STAFF / ADMIN SECTION EVENT LISTENERS
@@ -3486,6 +3577,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     
     }
+    
+    // Store reference to initializeApp for use by checkAuthState
+    initializeAppFunction = initializeApp;
     
     // If already logged in, initialize immediately
     if (auth && auth.currentUser) {
