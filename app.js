@@ -49,12 +49,37 @@ async function handleLogin(email, password) {
         return;
     }
     
+    // Clear any previous errors
+    showLoginError('');
+    
+    // Basic validation
+    if (!email || !password) {
+        showLoginError('Please enter both email and password.');
+        return;
+    }
+    
     try {
         const { signInWithEmailAndPassword } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js');
         await signInWithEmailAndPassword(auth, email, password);
         // Auth state change will handle UI update
     } catch (error) {
-        showLoginError(error.message || 'Login failed. Please check your credentials.');
+        let errorMessage = 'Login failed. ';
+        
+        if (error.code === 'auth/invalid-credential') {
+            errorMessage += 'Invalid email or password. Please check your credentials or create a user in Firebase Console.';
+        } else if (error.code === 'auth/user-not-found') {
+            errorMessage += 'User not found. Please create a user in Firebase Console first.';
+        } else if (error.code === 'auth/wrong-password') {
+            errorMessage += 'Incorrect password. Please try again.';
+        } else if (error.code === 'auth/invalid-email') {
+            errorMessage += 'Invalid email format. Please check your email address.';
+        } else if (error.code === 'auth/too-many-requests') {
+            errorMessage += 'Too many failed login attempts. Please try again later.';
+        } else {
+            errorMessage += error.message || 'Please check your credentials.';
+        }
+        
+        showLoginError(errorMessage);
     }
 }
 

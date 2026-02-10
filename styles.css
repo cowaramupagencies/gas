@@ -2436,6 +2436,20 @@ select#assign-run:focus {
     color: var(--status-danger);
     font-size: var(--font-size-sm);
     min-height: 20px;
+    line-height: 1.4;
+}
+
+.login-help {
+    margin-top: var(--space-md);
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--border-color);
+    text-align: center;
+}
+
+.login-help small {
+    color: var(--neutral-500);
+    font-size: var(--font-size-xs);
+    line-height: 1.4;
 }
 
 .main-app {
