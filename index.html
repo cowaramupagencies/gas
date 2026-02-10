@@ -9,7 +9,7 @@
 <body>
     <div class="container">
         <header>
-            <h1>Gas Orders</h1>
+            <img src="cowaglogo.png" alt="Company Logo" class="header-logo">
             <button type="button" class="reset-btn" id="reset-data-btn" title="Reset all data (testing only)">Reset Data</button>
         </header>
 
@@ -161,8 +161,7 @@
                         <button class="staff-tab" data-tab="run-builder">Run Builder</button>
                         <button class="staff-tab" data-tab="generated-runs">Generated Runs</button>
                         <button class="staff-tab" data-tab="daily-view">Daily/Weekly View</button>
-                        <button class="staff-tab" data-tab="csv-tools">CSV Tools</button>
-                        <button class="staff-tab" data-tab="tencia">Tencia</button>
+                        <button class="staff-tab" data-tab="customer-history">Customer History</button>
                     </div>
 
                 <!-- Undelivered Orders Tab -->
@@ -183,6 +182,134 @@
                     </div>
                     
                     <div id="undelivered-orders-table" class="undelivered-table-container"></div>
+                </div>
+                
+                <!-- Edit Order Modal -->
+                <div id="edit-order-modal" class="modal" style="display: none;">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h2>Edit Order</h2>
+                            <button type="button" class="modal-close" onclick="closeEditOrderModal()">&times;</button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="edit-order-form">
+                                <input type="hidden" id="edit-order-id">
+                                
+                                <!-- Customer Details -->
+                                <section class="customer-section">
+                                    <h3>Customer Details</h3>
+                                    <div class="form-group">
+                                        <label for="edit-customer-name">Name <span class="required">*</span></label>
+                                        <input type="text" id="edit-customer-name" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="edit-customer-mobile">Mobile <span class="required">*</span></label>
+                                        <input type="text" id="edit-customer-mobile" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="edit-customer-address">Address <span class="required">*</span></label>
+                                        <textarea id="edit-customer-address" rows="2" required></textarea>
+                                    </div>
+                                </section>
+                                
+                                <!-- Order Details -->
+                                <section class="order-section">
+                                    <h3>Order Details</h3>
+                                    
+                                    <div class="form-group">
+                                        <label>Bottles <span class="required">*</span></label>
+                                        <div class="bottle-selector-list">
+                                            <div class="bottle-row" data-type="45kg">
+                                                <span class="bottle-label">45kg</span>
+                                                <div class="quantity-controls">
+                                                    <button type="button" class="qty-btn bottle-qty-minus-edit" data-type="45kg">−</button>
+                                                    <input type="number" id="edit-bottle-qty-45kg" value="0" min="0" max="99" readonly class="bottle-qty-input">
+                                                    <button type="button" class="qty-btn bottle-qty-plus-edit" data-type="45kg">+</button>
+                                                </div>
+                                            </div>
+                                            <div class="bottle-row" data-type="8.5kg">
+                                                <span class="bottle-label">8.5kg</span>
+                                                <div class="quantity-controls">
+                                                    <button type="button" class="qty-btn bottle-qty-minus-edit" data-type="8.5kg">−</button>
+                                                    <input type="number" id="edit-bottle-qty-8.5kg" value="0" min="0" max="99" readonly class="bottle-qty-input">
+                                                    <button type="button" class="qty-btn bottle-qty-plus-edit" data-type="8.5kg">+</button>
+                                                </div>
+                                            </div>
+                                            <div class="bottle-row" data-type="Forklift 18kg">
+                                                <span class="bottle-label">Forklift 18kg</span>
+                                                <div class="quantity-controls">
+                                                    <button type="button" class="qty-btn bottle-qty-minus-edit" data-type="Forklift 18kg">−</button>
+                                                    <input type="number" id="edit-bottle-qty-Forklift 18kg" value="0" min="0" max="99" readonly class="bottle-qty-input">
+                                                    <button type="button" class="qty-btn bottle-qty-plus-edit" data-type="Forklift 18kg">+</button>
+                                                </div>
+                                            </div>
+                                            <div class="bottle-row" data-type="Forklift 15kg">
+                                                <span class="bottle-label">Forklift 15kg</span>
+                                                <div class="quantity-controls">
+                                                    <button type="button" class="qty-btn bottle-qty-minus-edit" data-type="Forklift 15kg">−</button>
+                                                    <input type="number" id="edit-bottle-qty-Forklift 15kg" value="0" min="0" max="99" readonly class="bottle-qty-input">
+                                                    <button type="button" class="qty-btn bottle-qty-plus-edit" data-type="Forklift 15kg">+</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div id="edit-bottle-total-display" class="bottle-total-display">Total: 0 bottles</div>
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <label>Preferred Delivery Day</label>
+                                        <div class="radio-group">
+                                            <label class="radio-label">
+                                                <input type="radio" name="edit-preferred-day" value="Tuesday">
+                                                Tuesday
+                                            </label>
+                                            <label class="radio-label">
+                                                <input type="radio" name="edit-preferred-day" value="Friday">
+                                                Friday
+                                            </label>
+                                            <label class="radio-label">
+                                                <input type="radio" name="edit-preferred-day" value="Any" checked>
+                                                Any
+                                            </label>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <label for="edit-order-notes">Order Notes (Optional)</label>
+                                        <textarea id="edit-order-notes" rows="3" placeholder="Gate codes, dogs on site, access instructions..."></textarea>
+                                    </div>
+                                </section>
+                                
+                                <!-- Staff Options -->
+                                <section class="staff-section">
+                                    <button type="button" class="staff-toggle" id="edit-staff-toggle">
+                                        Staff options ▸
+                                    </button>
+                                    <div class="staff-options" id="edit-staff-options" style="display: none;">
+                                        <div class="form-group">
+                                            <label for="edit-delivery-date">Delivery Date</label>
+                                            <input type="date" id="edit-delivery-date">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="edit-assign-run">Assign to Run</label>
+                                            <select id="edit-assign-run">
+                                                <option value="">Auto</option>
+                                            </select>
+                                            <p class="field-hint" id="edit-assign-run-hint">Select a date to see runs. Max 8 bottles per run (45kg only).</p>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="edit-invoice-number">Invoice Number</label>
+                                            <input type="text" id="edit-invoice-number">
+                                        </div>
+                                    </div>
+                                </section>
+                                
+                                <div class="modal-actions">
+                                    <button type="button" class="btn-secondary" onclick="closeEditOrderModal()">Cancel</button>
+                                    <button type="button" class="save-btn" onclick="saveEditedOrder()">Save Changes</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Generated Runs Tab -->
@@ -235,55 +362,23 @@
                     <div id="stock-summary" class="stock-summary"></div>
                 </div>
 
-                <!-- CSV Tools Tab -->
-                <div class="staff-tab-content" id="tab-csv-tools">
-                    <h3>CSV Import / Export</h3>
+                <!-- Customer History Tab -->
+                <div class="staff-tab-content" id="tab-customer-history">
+                    <h3>Customer History</h3>
                     
-                    <div class="csv-section">
-                        <h4>Export</h4>
-                        <div class="csv-export-buttons">
-                            <button id="export-customers">Export All Customers</button>
-                            <button id="export-orders">Export All Orders</button>
-                            <button id="export-orders-date">Export Orders by Date</button>
-                            <button id="export-orders-run">Export Orders by Run</button>
-                            <button id="export-undelivered">Export Undelivered Orders</button>
-                        </div>
+                    <div class="customer-history-search">
+                        <label for="customer-history-search">Search Customers</label>
+                        <input 
+                            type="text" 
+                            id="customer-history-search" 
+                            placeholder="Search by customer name, mobile, or address..."
+                            autocomplete="off"
+                        >
                     </div>
-
-                    <div class="csv-section">
-                        <h4>Import</h4>
-                        <div class="form-group">
-                            <label for="csv-file">Select CSV File</label>
-                            <input type="file" id="csv-file" accept=".csv">
-                        </div>
-                        <div class="form-group">
-                            <label>Import Type</label>
-                            <div class="radio-group">
-                                <label class="radio-label">
-                                    <input type="radio" name="import-type" value="customers" checked>
-                                    Customers
-                                </label>
-                                <label class="radio-label">
-                                    <input type="radio" name="import-type" value="orders">
-                                    Orders
-                                </label>
-                            </div>
-                        </div>
-                        <button id="import-csv">Import CSV</button>
-                        <div id="import-message" class="import-message"></div>
-                    </div>
+                    
+                    <div id="customer-history-list" class="customer-history-list"></div>
                 </div>
-
-                <!-- Tencia Integration Tab -->
-                <div class="staff-tab-content" id="tab-tencia">
-                    <h3>Tencia Integration</h3>
-                    <div class="tencia-placeholder">
-                        <p><strong>Coming Soon</strong></p>
-                        <p>This section will integrate with Tencia for invoicing and order management.</p>
-                        <p>For now, use CSV export to prepare data for invoicing.</p>
-                        <button id="export-tencia-format">Export CSV for Tencia</button>
-                    </div>
-                </div>
+                
 
                 </div>
             </section>

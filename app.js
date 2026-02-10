@@ -158,6 +158,16 @@ function formatBottleBreakdown(order) {
     return parts.length ? parts.join(', ') : '—';
 }
 
+// Format bottle types only (without quantities) for customer history
+function formatBottleTypesOnly(order) {
+    const b = getOrderBottles(order);
+    const parts = [];
+    BOTTLE_TYPES.forEach(t => {
+        if (b[t] > 0) parts.push(t);
+    });
+    return parts.length ? parts.join(', ') : '—';
+}
+
 // Get current bottle count for a run (excluding optional orderId to add)
 // Returns total bottles for display purposes
 function getRunBottleCount(runId, excludeOrderId) {
@@ -1045,70 +1055,143 @@ function downloadManifestPDF(manifest) {
             <title>Gas Delivery Manifest - ${data.deliveryDate}</title>
             <style>
                 @media print {
-                    @page { margin: 1cm; }
+                    @page {
+                        size: A4 landscape;
+                        margin: 1cm;
+                    }
                 }
                 body {
                     font-family: Arial, sans-serif;
-                    padding: 20px;
-                    max-width: 800px;
-                    margin: 0 auto;
+                    padding: 10px;
+                    margin: 0;
                 }
                 .header {
                     text-align: center;
                     border-bottom: 3px solid #000;
-                    padding-bottom: 15px;
-                    margin-bottom: 20px;
+                    padding-bottom: 10px;
+                    margin-bottom: 15px;
+                    page-break-after: avoid;
+                }
+                .header-logo {
+                    max-width: 180px;
+                    max-height: 70px;
+                    margin-bottom: 8px;
                 }
                 .header h1 {
                     margin: 0;
-                    font-size: 24px;
-                }
-                .header h2 {
-                    margin: 5px 0;
-                    font-size: 18px;
+                    font-size: 22px;
                 }
                 .manifest-info {
                     display: flex;
                     justify-content: space-between;
-                    margin-bottom: 20px;
-                    font-size: 14px;
+                    margin-bottom: 15px;
+                    font-size: 12px;
+                    page-break-after: avoid;
                 }
                 table {
                     width: 100%;
                     border-collapse: collapse;
-                    margin-bottom: 20px;
+                    margin-bottom: 15px;
+                    page-break-inside: auto;
+                }
+                thead {
+                    display: table-header-group;
+                }
+                tbody {
+                    display: table-row-group;
+                }
+                tr {
+                    page-break-inside: avoid;
+                    page-break-after: auto;
                 }
                 th, td {
                     border: 1px solid #000;
-                    padding: 8px;
+                    padding: 6px 4px;
                     text-align: left;
-                    font-size: 12px;
+                    font-size: 10px;
+                    word-wrap: break-word;
                 }
                 th {
                     background-color: #f0f0f0;
                     font-weight: bold;
                 }
+                td:nth-child(1) {
+                    width: 40px;
+                    text-align: center;
+                }
+                td:nth-child(2) {
+                    width: 100px;
+                }
+                td:nth-child(3) {
+                    width: 120px;
+                }
+                td:nth-child(4) {
+                    width: 80px;
+                }
+                td:nth-child(5) {
+                    width: 100px;
+                }
+                td:nth-child(6) {
+                    width: 50px;
+                    text-align: center;
+                }
+                td:nth-child(7) {
+                    min-width: 100px;
+                    max-width: 150px;
+                }
+                td:nth-child(8) {
+                    width: 80px;
+                }
+                td:nth-child(9) {
+                    width: 35px;
+                    text-align: center;
+                }
                 .footer {
-                    margin-top: 30px;
-                    padding-top: 15px;
+                    margin-top: 20px;
+                    padding-top: 10px;
                     border-top: 2px solid #000;
+                    page-break-inside: avoid;
                 }
                 .footer-row {
                     display: flex;
                     justify-content: space-between;
-                    margin-bottom: 10px;
+                    margin-bottom: 8px;
+                    font-size: 11px;
+                }
+                .hazardous-info {
+                    margin-top: 20px;
+                    padding: 10px;
+                    border: 2px solid #000;
+                    background-color: #fffacd;
+                    page-break-inside: avoid;
+                }
+                .hazardous-info h3 {
+                    margin: 0 0 8px 0;
+                    font-size: 12px;
+                    color: #000;
+                }
+                .hazardous-details {
+                    font-size: 10px;
+                }
+                .hazardous-details p {
+                    margin: 3px 0;
                 }
                 .signature-box {
-                    margin-top: 30px;
-                    padding-top: 15px;
+                    margin-top: 20px;
+                    padding-top: 10px;
                     border-top: 1px solid #000;
+                    page-break-inside: avoid;
+                }
+                .signature-box p {
+                    margin: 5px 0;
+                    font-size: 11px;
                 }
             </style>
         </head>
         <body>
             <div class="header">
+                <img src="cowaglogo.png" alt="Company Logo" class="header-logo">
                 <h1>GAS DELIVERY MANIFEST</h1>
-                <h2>Company Name</h2>
             </div>
             
             <div class="manifest-info">
@@ -1141,14 +1224,14 @@ function downloadManifestPDF(manifest) {
                     ${data.stops.map(stop => `
                         <tr>
                             <td>${stop.stopNumber}</td>
-                            <td>${escapeHtml(stop.customerName)}</td>
-                            <td>${escapeHtml(stop.address)}</td>
-                            <td>${escapeHtml(stop.mobile)}</td>
-                            <td>${escapeHtml(stop.bottleBreakdown || (stop.bottleType ? stop.bottleType + ' ×' + stop.quantity : stop.quantity))}</td>
-                            <td>${stop.quantity}</td>
-                            <td>${escapeHtml(stop.notes)}</td>
-                            <td>${escapeHtml(stop.invoiceNumber)}</td>
-                            <td style="width: 80px; height: 40px;"></td>
+                            <td>${escapeHtml(stop.customerName || '')}</td>
+                            <td>${escapeHtml(stop.address || '')}</td>
+                            <td>${escapeHtml(stop.mobile || '')}</td>
+                            <td>${escapeHtml(stop.bottleBreakdown || (stop.bottleType ? stop.bottleType + ' x' + stop.quantity : stop.quantity || ''))}</td>
+                            <td>${stop.quantity || 0}</td>
+                            <td style="min-width: 120px;">${escapeHtml(stop.notes || '')}</td>
+                            <td>${escapeHtml(stop.invoiceNumber || '')}</td>
+                            <td style="width: 40px; height: 30px; text-align: center;"></td>
                         </tr>
                     `).join('')}
                 </tbody>
@@ -1162,12 +1245,24 @@ function downloadManifestPDF(manifest) {
                 <div class="footer-row">
                     <div>
                         <strong>Breakdown:</strong><br>
-                        ${BOTTLE_TYPES.map(t => `${t} × ${data.breakdown[t] || 0}`).join('<br>')}
+                        ${BOTTLE_TYPES.map(t => `${t} x ${data.breakdown[t] || 0}`).join('<br>')}
                     </div>
                     <div>
                         <strong>Vehicle Type:</strong> _____________<br>
                         <strong>Driver Name:</strong> _____________
                     </div>
+                </div>
+            </div>
+            
+            <div class="hazardous-info">
+                <h3>Dangerous Goods Information (Western Australia)</h3>
+                <div class="hazardous-details">
+                    <p><strong>Class:</strong> Class 2 - Gases</p>
+                    <p><strong>UN Number:</strong> UN 1075 (Liquefied Petroleum Gas)</p>
+                    <p><strong>Proper Shipping Name:</strong> LPG (Liquefied Petroleum Gas)</p>
+                    <p><strong>Packing Group:</strong> Not applicable</p>
+                    <p><strong>Emergency Contact:</strong> _________________________</p>
+                    <p><strong>Emergency Phone:</strong> _________________________</p>
                 </div>
             </div>
             
@@ -1205,7 +1300,8 @@ function renderStockCount() {
     const totals = {
         '45kg': 0,
         '8.5kg': 0,
-        'Forklift': 0,
+        'Forklift 18kg': 0,
+        'Forklift 15kg': 0,
         total: 0
     };
     
@@ -1214,6 +1310,9 @@ function renderStockCount() {
         BOTTLE_TYPES.forEach(t => { totals[t] += ob[t]; });
         totals.total += getOrderTotalBottles(order);
     });
+    
+    // Combine forklift 15kg and 18kg
+    const forkliftTotal = totals['Forklift 18kg'] + totals['Forklift 15kg'];
     
     const container = document.getElementById('stock-summary');
     container.innerHTML = `
@@ -1231,8 +1330,8 @@ function renderStockCount() {
                 <span class="stock-value">${totals['8.5kg']}</span>
             </div>
             <div class="stock-item">
-                <span class="stock-label">Forklift:</span>
-                <span class="stock-value">${totals['Forklift']}</span>
+                <span class="stock-label">Forklift 15kg / 18kg:</span>
+                <span class="stock-value">${forkliftTotal}</span>
             </div>
         </div>
     `;
@@ -1641,7 +1740,7 @@ function renderGeneratedRuns() {
     
     const orders = getOrders();
     
-    let html = '<div class="generated-runs-grid">';
+    let html = '<div class="generated-runs-list-collapsible">';
     
     runs.forEach(run => {
         const manifest = getActiveManifestForRun(run.id);
@@ -1653,20 +1752,23 @@ function renderGeneratedRuns() {
         const version = manifest ? (manifest.version || 1) : null;
         
         html += `
-            <div class="generated-run-card" data-run-id="${run.id}">
-                <div class="run-card-header">
-                    <h4>${formatDate(run.deliveryDate)} - Run ${run.runNumber}</h4>
+            <div class="generated-run-item-collapsible">
+                <div class="run-item-header-collapsible" onclick="toggleGeneratedRun('${run.id}')">
+                    <span class="run-item-title">${formatDate(run.deliveryDate)} - Run ${run.runNumber}</span>
                     <span class="run-status-badge status-${status.toLowerCase().replace(' ', '-')}">${status}</span>
+                    <span class="toggle-icon-run" id="toggle-run-${run.id}">▸</span>
                 </div>
-                <div class="run-card-info">
-                    <div><strong>Manifest ID:</strong> ${manifestId}${version ? ` (v${version})` : ''}</div>
-                    <div><strong>Status:</strong> <span class="manifest-status-badge status-active">ACTIVE</span></div>
-                    <div><strong>Bottles:</strong> ${deliveredBottles} / ${totalBottles} delivered</div>
-                    <div><strong>Stops:</strong> ${runOrders.length}</div>
-                </div>
-                <div class="run-card-actions">
-                    <button class="view-run-btn" onclick="viewRunDetail('${run.id}')">View Run</button>
-                    ${manifest ? `<button class="download-manifest-btn" onclick="downloadManifestPDF(getManifestById('${manifest.id}'))">Download Manifest</button>` : ''}
+                <div class="run-item-details-collapsible" id="run-details-${run.id}" style="display: none;">
+                    <div class="run-card-info">
+                        <div><strong>Manifest ID:</strong> ${manifestId}${version ? ` (v${version})` : ''}</div>
+                        <div><strong>Status:</strong> <span class="manifest-status-badge status-active">ACTIVE</span></div>
+                        <div><strong>Bottles:</strong> ${deliveredBottles} / ${totalBottles} delivered</div>
+                        <div><strong>Stops:</strong> ${runOrders.length}</div>
+                    </div>
+                    <div class="run-card-actions">
+                        <button class="view-run-btn" onclick="viewRunDetail('${run.id}')">View Run</button>
+                        ${manifest ? `<button class="download-manifest-btn" onclick="downloadManifestPDF(getManifestById('${manifest.id}'))">Download Manifest</button>` : ''}
+                    </div>
                 </div>
             </div>
         `;
@@ -1674,6 +1776,20 @@ function renderGeneratedRuns() {
     
     html += '</div>';
     container.innerHTML = html;
+}
+
+// Toggle generated run details
+function toggleGeneratedRun(runId) {
+    const detailsDiv = document.getElementById('run-details-' + runId);
+    const toggleIcon = document.getElementById('toggle-run-' + runId);
+    
+    if (detailsDiv.style.display === 'none') {
+        detailsDiv.style.display = 'block';
+        toggleIcon.textContent = '▾';
+    } else {
+        detailsDiv.style.display = 'none';
+        toggleIcon.textContent = '▸';
+    }
 }
 
 // Get manifest by ID
@@ -2105,7 +2221,7 @@ function renderUndeliveredOrders(searchQuery = '') {
         const invoiceNumber = order.invoiceNumber || '';
         
         html += `
-            <tr data-order-id="${order.id}">
+            <tr data-order-id="${order.id}" class="order-row-clickable" onclick="openEditOrderModal('${order.id}')" style="cursor: pointer;">
                 <td>${escapeHtml(customer.name)}</td>
                 <td>${escapeHtml(customer.mobile)}</td>
                 <td>${escapeHtml(customer.address)}</td>
@@ -2119,7 +2235,8 @@ function renderUndeliveredOrders(searchQuery = '') {
                         class="assign-delivery-date" 
                         data-order-id="${order.id}"
                         value="${currentDeliveryDate}"
-                        onchange="assignDeliveryDateToOrder('${order.id}', this.value)"
+                        onclick="event.stopPropagation();"
+                        onchange="assignDeliveryDateToOrder('${order.id}', this.value); event.stopPropagation();"
                     >
                 </td>
                 <td class="notes-cell">${escapeHtml(notes)}</td>
@@ -2140,6 +2257,443 @@ function renderUndeliveredOrders(searchQuery = '') {
     container.innerHTML = html;
 }
 
+// Open edit order modal
+function openEditOrderModal(orderId) {
+    const orders = getOrders();
+    const order = orders.find(o => o.id === orderId);
+    if (!order) {
+        alert('Order not found');
+        return;
+    }
+    
+    const customer = getCustomerById(order.customerId);
+    if (!customer) {
+        alert('Customer not found');
+        return;
+    }
+    
+    // Populate form fields
+    document.getElementById('edit-order-id').value = order.id;
+    document.getElementById('edit-customer-name').value = customer.name;
+    document.getElementById('edit-customer-mobile').value = customer.mobile;
+    document.getElementById('edit-customer-address').value = customer.address;
+    
+    // Set bottle quantities
+    const bottles = getOrderBottles(order);
+    BOTTLE_TYPES.forEach(type => {
+        const input = document.getElementById('edit-bottle-qty-' + type);
+        if (input) input.value = bottles[type] || 0;
+    });
+    updateEditBottleTotalDisplay();
+    
+    // Set preferred day
+    const preferredDay = order.preferredDay || 'Any';
+    document.querySelector(`input[name="edit-preferred-day"][value="${preferredDay}"]`).checked = true;
+    
+    // Set notes
+    document.getElementById('edit-order-notes').value = order.notes || '';
+    
+    // Set staff options
+    document.getElementById('edit-delivery-date').value = order.deliveryDate || '';
+    document.getElementById('edit-invoice-number').value = order.invoiceNumber || '';
+    
+    // Populate run dropdown if delivery date exists
+    populateEditAssignRunDropdown();
+    
+    // Set current run if assigned
+    const assignRunSelect = document.getElementById('edit-assign-run');
+    if (assignRunSelect && order.runId) {
+        // Find the run and set it
+        const runs = getRuns();
+        const run = runs.find(r => r.id === order.runId);
+        if (run) {
+            assignRunSelect.value = order.runId;
+        }
+    } else if (assignRunSelect) {
+        assignRunSelect.value = '';
+    }
+    
+    // Show modal
+    document.getElementById('edit-order-modal').style.display = 'flex';
+}
+
+// Close edit order modal
+function closeEditOrderModal() {
+    document.getElementById('edit-order-modal').style.display = 'none';
+}
+
+// Get edit form bottle quantities
+function getEditFormBottleQuantities() {
+    const bottles = {};
+    BOTTLE_TYPES.forEach(type => {
+        const el = document.getElementById('edit-bottle-qty-' + type);
+        bottles[type] = el ? Math.max(0, parseInt(el.value, 10) || 0) : 0;
+    });
+    return bottles;
+}
+
+// Get edit form total bottle count
+function getEditFormTotalBottleCount() {
+    const b = getEditFormBottleQuantities();
+    return Object.values(b).reduce((sum, qty) => sum + qty, 0);
+}
+
+// Get edit form trailer bottle count (45kg only)
+function getEditFormTrailerBottleCount() {
+    const b = getEditFormBottleQuantities();
+    return b['45kg'] || 0;
+}
+
+// Update edit bottle total display
+function updateEditBottleTotalDisplay() {
+    const el = document.getElementById('edit-bottle-total-display');
+    if (!el) return;
+    const total = getEditFormTotalBottleCount();
+    el.textContent = 'Total: ' + total + ' bottle' + (total !== 1 ? 's' : '');
+}
+
+// Populate edit assign run dropdown
+function populateEditAssignRunDropdown() {
+    const dateInput = document.getElementById('edit-delivery-date');
+    const runSelect = document.getElementById('edit-assign-run');
+    if (!dateInput || !runSelect) return;
+    
+    const deliveryDate = dateInput.value;
+    const orderTrailerBottles = getEditFormTrailerBottleCount();
+    
+    runSelect.innerHTML = '<option value="">Auto</option>';
+    
+    if (!deliveryDate) {
+        const hint = document.getElementById('edit-assign-run-hint');
+        if (hint) hint.textContent = 'Select a date to see runs. Max 8 bottles per run (45kg only).';
+        return;
+    }
+    
+    const runs = getRuns().filter(r => r.deliveryDate === deliveryDate);
+    const currentOrderId = document.getElementById('edit-order-id').value;
+    
+    runs.forEach(run => {
+        const current = getRunTrailerBottleCount(run.id, currentOrderId);
+        const wouldBe = current + orderTrailerBottles;
+        const full = wouldBe > MAX_BOTTLES_PER_RUN;
+        const option = document.createElement('option');
+        option.value = run.id;
+        option.textContent = 'Run ' + run.runNumber + ' (' + current + '/8)' + (full ? ' — full' : '');
+        if (full) option.disabled = true;
+        runSelect.appendChild(option);
+    });
+    
+    const hint = document.getElementById('edit-assign-run-hint');
+    if (hint) hint.textContent = orderTrailerBottles > MAX_BOTTLES_PER_RUN ? 'Order exceeds 8 bottles (45kg only); cannot assign to a single run.' : 'Max 8 bottles per run (45kg only). Auto picks first run with space.';
+}
+
+// Validate edit form
+function validateEditForm() {
+    const name = document.getElementById('edit-customer-name').value.trim();
+    const mobile = document.getElementById('edit-customer-mobile').value.trim();
+    const address = document.getElementById('edit-customer-address').value.trim();
+    const totalBottles = getEditFormTotalBottleCount();
+    
+    if (!name) {
+        alert('Please enter customer name');
+        document.getElementById('edit-customer-name').focus();
+        return false;
+    }
+    
+    if (!mobile) {
+        alert('Please enter mobile number');
+        document.getElementById('edit-customer-mobile').focus();
+        return false;
+    }
+    
+    if (!address) {
+        alert('Please enter address');
+        document.getElementById('edit-customer-address').focus();
+        return false;
+    }
+    
+    if (totalBottles < 1) {
+        alert('Please add at least one bottle (set quantity for a bottle type)');
+        return false;
+    }
+    
+    // If a specific run is selected, check capacity (only 45kg bottles count)
+    const runSelect = document.getElementById('edit-assign-run');
+    const selectedRunId = runSelect && runSelect.value;
+    const currentOrderId = document.getElementById('edit-order-id').value;
+    if (selectedRunId) {
+        const currentTrailer = getRunTrailerBottleCount(selectedRunId, currentOrderId);
+        const orderTrailer = getEditFormTrailerBottleCount();
+        if (currentTrailer + orderTrailer > MAX_BOTTLES_PER_RUN) {
+            alert('This run is full (max ' + MAX_BOTTLES_PER_RUN + ' bottles, 45kg only). Choose another run or leave as Auto.');
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+// Save edited order
+function saveEditedOrder() {
+    if (!validateEditForm()) {
+        return;
+    }
+    
+    const orderId = document.getElementById('edit-order-id').value;
+    const orders = getOrders();
+    const order = orders.find(o => o.id === orderId);
+    if (!order) {
+        alert('Order not found');
+        return;
+    }
+    
+    const name = document.getElementById('edit-customer-name').value.trim();
+    const mobile = document.getElementById('edit-customer-mobile').value.trim();
+    const address = document.getElementById('edit-customer-address').value.trim();
+    const bottles = getEditFormBottleQuantities();
+    const totalBottleCount = getEditFormTotalBottleCount();
+    const preferredDay = document.querySelector('input[name="edit-preferred-day"]:checked').value;
+    const orderNotes = document.getElementById('edit-order-notes').value.trim();
+    let deliveryDate = document.getElementById('edit-delivery-date').value || null;
+    const invoiceNumber = document.getElementById('edit-invoice-number').value.trim() || null;
+    const assignRunSelect = document.getElementById('edit-assign-run');
+    const assignRunValue = assignRunSelect ? assignRunSelect.value : '';
+    
+    // Update customer
+    const customers = getCustomers();
+    let customer = customers.find(c => c.id === order.customerId);
+    if (customer) {
+        customer.name = name;
+        customer.mobile = mobile;
+        customer.address = address;
+        saveCustomers(customers);
+    } else {
+        // Create new customer if not found
+        customer = findOrCreateCustomer(name, mobile, address);
+        order.customerId = customer.id;
+    }
+    
+    // Resolve run assignment: specific run or Auto (only 45kg bottles count for capacity)
+    let runId = null;
+    const orderTrailerBottles = getEditFormTrailerBottleCount();
+    if (deliveryDate && assignRunValue) {
+        if (assignRunValue === 'auto' || assignRunValue === '') {
+            // Auto: first run with capacity (excluding current order)
+            const runs = getRuns().filter(r => r.deliveryDate === deliveryDate);
+            for (let i = 0; i < runs.length; i++) {
+                const currentTrailer = getRunTrailerBottleCount(runs[i].id, orderId);
+                if (currentTrailer + orderTrailerBottles <= MAX_BOTTLES_PER_RUN) {
+                    runId = runs[i].id;
+                    break;
+                }
+            }
+        } else {
+            runId = assignRunValue;
+            const currentTrailer = getRunTrailerBottleCount(runId, orderId);
+            if (currentTrailer + orderTrailerBottles > MAX_BOTTLES_PER_RUN) {
+                alert('This run is full (max ' + MAX_BOTTLES_PER_RUN + ' bottles, 45kg only). Save blocked.');
+                return;
+            }
+        }
+    }
+    
+    // Update order
+    order.bottles = bottles;
+    order.totalBottleCount = totalBottleCount;
+    order.preferredDay = preferredDay;
+    order.deliveryDate = deliveryDate;
+    order.invoiceNumber = invoiceNumber;
+    order.notes = orderNotes;
+    
+    // Handle run assignment change
+    const oldRunId = order.runId;
+    order.runId = runId;
+    order.status = runId ? 'Assigned' : 'Unassigned';
+    
+    // If run changed, update old and new runs
+    if (oldRunId !== runId) {
+        const runs = getRuns();
+        if (oldRunId) {
+            const oldRun = runs.find(r => r.id === oldRunId);
+            if (oldRun && oldRun.orderIds) {
+                oldRun.orderIds = oldRun.orderIds.filter(id => id !== orderId);
+            }
+        }
+        if (runId) {
+            const newRun = runs.find(r => r.id === runId);
+            if (newRun && !newRun.orderIds.includes(orderId)) {
+                newRun.orderIds.push(orderId);
+            }
+        }
+        saveRuns(runs);
+    }
+    
+    saveOrders(orders);
+    
+    // Update customer notes if order notes provided
+    if (orderNotes) {
+        updateCustomerNotes(customer.id, orderNotes);
+    }
+    
+    // Close modal
+    closeEditOrderModal();
+    
+    // Refresh displays
+    const searchQuery = document.getElementById('undelivered-search')?.value || '';
+    renderUndeliveredOrders(searchQuery);
+    
+    // Refresh run builder if visible
+    const runDate = document.getElementById('run-date')?.value;
+    if (runDate) {
+        renderRunBuilder(runDate);
+    }
+    
+    alert('Order updated successfully!');
+}
+
+// Render customer history
+function renderCustomerHistory(searchQuery = '') {
+    const container = document.getElementById('customer-history-list');
+    if (!container) return;
+    
+    const customers = getCustomers();
+    const orders = getOrders();
+    const runs = getRuns();
+    
+    // Filter customers by search query
+    let filteredCustomers = customers;
+    if (searchQuery && searchQuery.trim()) {
+        const lowerQuery = searchQuery.toLowerCase().trim();
+        filteredCustomers = customers.filter(customer => {
+            const nameMatch = customer.name.toLowerCase().includes(lowerQuery);
+            const mobileMatch = customer.mobile.toLowerCase().includes(lowerQuery);
+            const addressMatch = customer.address.toLowerCase().includes(lowerQuery);
+            return nameMatch || mobileMatch || addressMatch;
+        });
+    }
+    
+    if (filteredCustomers.length === 0) {
+        container.innerHTML = '<p class="no-orders-message">No customers found.</p>';
+        return;
+    }
+    
+    // Sort customers by name
+    filteredCustomers.sort((a, b) => a.name.localeCompare(b.name));
+    
+    let html = '<div class="customer-list-simple">';
+    
+    filteredCustomers.forEach(customer => {
+        // Get all orders for this customer
+        const customerOrders = orders.filter(o => o.customerId === customer.id);
+        
+        // Sort orders by creation date (newest first)
+        customerOrders.sort((a, b) => {
+            const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
+            const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
+            return dateB - dateA;
+        });
+        
+        // Calculate totals
+        const totalOrders = customerOrders.length;
+        const deliveredOrders = customerOrders.filter(o => o.delivered).length;
+        const totalBottles = customerOrders.reduce((sum, o) => sum + getOrderTotalBottles(o), 0);
+        
+        html += `
+            <div class="customer-list-item">
+                <div class="customer-name-header" onclick="toggleCustomerOrders('${customer.id}')">
+                    <span class="customer-name">${escapeHtml(customer.name)}</span>
+                    <span class="customer-order-count">${totalOrders} order${totalOrders !== 1 ? 's' : ''} • ${totalBottles} bottle${totalBottles !== 1 ? 's' : ''}</span>
+                    <span class="toggle-icon" id="toggle-${customer.id}">▸</span>
+                </div>
+                <div class="customer-orders-details" id="orders-${customer.id}" style="display: none;">
+                    <div class="customer-details-expanded">
+                        <div class="customer-contact-expanded">
+                            <div><strong>Mobile:</strong> ${escapeHtml(customer.mobile)}</div>
+                            <div><strong>Address:</strong> ${escapeHtml(customer.address)}</div>
+                        </div>
+                        ${customer.notes ? `<div class="customer-notes"><strong>Customer Notes:</strong> ${escapeHtml(customer.notes)}</div>` : ''}
+                        <div class="customer-summary-expanded">
+                            <span>Total Orders: <strong>${totalOrders}</strong></span>
+                            <span>Delivered: <strong>${deliveredOrders}</strong></span>
+                            <span>Total Bottles: <strong>${totalBottles}</strong></span>
+                        </div>
+                    </div>
+                    <div class="customer-orders-section">
+                        <table class="customer-orders-table">
+                            <thead>
+                                <tr>
+                                    <th>Order Date</th>
+                                    <th>Delivery Date</th>
+                                    <th>Bottles</th>
+                                    <th>Bottle Types</th>
+                                    <th>Preferred Day</th>
+                                    <th>Status</th>
+                                    <th>Delivered</th>
+                                    <th>Delivered Date</th>
+                                    <th>Run</th>
+                                    <th>Invoice #</th>
+                                    <th>Notes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+        `;
+        
+        customerOrders.forEach(order => {
+            let orderDate = 'N/A';
+            if (order.createdAt) {
+                const dateStr = order.createdAt.split('T')[0];
+                orderDate = formatDate(dateStr);
+            }
+            const deliveryDate = order.deliveryDate ? formatDate(order.deliveryDate) : '—';
+            const deliveredDate = order.deliveredAt ? new Date(order.deliveredAt).toLocaleString('en-AU') : '—';
+            const run = order.runId ? runs.find(r => r.id === order.runId) : null;
+            const runInfo = run ? `Run ${run.runNumber} (${formatDate(run.deliveryDate)})` : '—';
+            const status = order.delivered ? 'Delivered' : (order.runId ? 'Assigned' : 'Unassigned');
+            
+            html += `
+                <tr class="${order.delivered ? 'delivered-order' : ''}">
+                    <td>${orderDate}</td>
+                    <td>${deliveryDate}</td>
+                    <td>${getOrderTotalBottles(order)}</td>
+                    <td>${escapeHtml(formatBottleTypesOnly(order))}</td>
+                    <td>${escapeHtml(order.preferredDay || 'Any')}</td>
+                    <td><span class="status-badge status-${status.toLowerCase()}">${status}</span></td>
+                    <td>${order.delivered ? '<span class="delivered-badge">✓ Yes</span>' : '<span class="not-delivered-badge">No</span>'}</td>
+                    <td>${deliveredDate}</td>
+                    <td>${runInfo}</td>
+                    <td>${escapeHtml(order.invoiceNumber || '—')}</td>
+                    <td class="notes-cell">${escapeHtml(order.notes || '—')}</td>
+                </tr>
+            `;
+        });
+        
+        html += `
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+// Toggle customer orders visibility
+function toggleCustomerOrders(customerId) {
+    const ordersDiv = document.getElementById('orders-' + customerId);
+    const toggleIcon = document.getElementById('toggle-' + customerId);
+    
+    if (ordersDiv.style.display === 'none') {
+        ordersDiv.style.display = 'block';
+        toggleIcon.textContent = '▾';
+    } else {
+        ordersDiv.style.display = 'none';
+        toggleIcon.textContent = '▸';
+    }
+}
+
 // Assign delivery date to an order
 function assignDeliveryDateToOrder(orderId, deliveryDate) {
     const orders = getOrders();
@@ -2150,13 +2704,44 @@ function assignDeliveryDateToOrder(orderId, deliveryDate) {
         return;
     }
     
+    const oldDeliveryDate = order.deliveryDate;
+    const oldRunId = order.runId;
+    
     // Update order
     if (deliveryDate) {
         order.deliveryDate = deliveryDate;
-        // Don't change status - it stays as Unassigned/Assigned until marked Delivered
+        
+        // If delivery date changed and order was assigned to a run on the old date, unassign it
+        if (oldDeliveryDate && oldDeliveryDate !== deliveryDate && oldRunId) {
+            const runs = getRuns();
+            const oldRun = runs.find(r => r.id === oldRunId);
+            
+            // Only unassign if the old run was for the old date
+            if (oldRun && oldRun.deliveryDate === oldDeliveryDate) {
+                order.runId = null;
+                order.status = 'Unassigned';
+                
+                // Remove order from old run's orderIds if it exists
+                if (oldRun.orderIds && oldRun.orderIds.includes(orderId)) {
+                    oldRun.orderIds = oldRun.orderIds.filter(id => id !== orderId);
+                }
+                
+                saveRuns(runs);
+            }
+        }
     } else {
-        // If date is cleared, remove it
+        // If date is cleared, remove it and unassign from run
         order.deliveryDate = null;
+        if (order.runId) {
+            const runs = getRuns();
+            const run = runs.find(r => r.id === order.runId);
+            if (run && run.orderIds && run.orderIds.includes(orderId)) {
+                run.orderIds = run.orderIds.filter(id => id !== orderId);
+            }
+            order.runId = null;
+            order.status = 'Unassigned';
+            saveRuns(runs);
+        }
     }
     
     saveOrders(orders);
@@ -2165,8 +2750,20 @@ function assignDeliveryDateToOrder(orderId, deliveryDate) {
     const searchQuery = document.getElementById('undelivered-search')?.value || '';
     renderUndeliveredOrders(searchQuery);
     
+    // Refresh run builder if visible and if date changed
+    const runDate = document.getElementById('run-date')?.value;
+    if (runDate) {
+        // Refresh both old and new dates if they're different
+        if (oldDeliveryDate && oldDeliveryDate !== deliveryDate) {
+            renderRunBuilder(oldDeliveryDate);
+        }
+        if (deliveryDate && deliveryDate === runDate) {
+            renderRunBuilder(deliveryDate);
+        }
+    }
+    
     // Show confirmation
-    showMessage(`Delivery date ${deliveryDate ? 'assigned' : 'removed'} for order`, 'success');
+    showMessage(`Delivery date ${deliveryDate ? 'assigned' : 'removed'} for order${oldRunId && oldDeliveryDate !== deliveryDate ? '. Order unassigned from previous run.' : ''}`, 'success');
 }
 
 // Initialize app when DOM is loaded
@@ -2329,6 +2926,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else if (targetTab === 'stock-count') {
                 renderStockCount();
+            } else if (targetTab === 'customer-history') {
+                renderCustomerHistory();
             }
         });
     });
@@ -2381,6 +2980,65 @@ document.addEventListener('DOMContentLoaded', () => {
     window.removeRun = removeRun;
     window.generateManifest = generateManifest;
     window.assignDeliveryDateToOrder = assignDeliveryDateToOrder;
+    window.openEditOrderModal = openEditOrderModal;
+    window.closeEditOrderModal = closeEditOrderModal;
+    window.saveEditedOrder = saveEditedOrder;
+    window.toggleCustomerOrders = toggleCustomerOrders;
+    window.toggleGeneratedRun = toggleGeneratedRun;
+    
+    // Edit form bottle quantity controls
+    document.querySelectorAll('.bottle-qty-plus-edit').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const type = btn.dataset.type;
+            const input = document.getElementById('edit-bottle-qty-' + type);
+            if (input) {
+                const v = Math.min(99, (parseInt(input.value, 10) || 0) + 1);
+                input.value = v;
+                updateEditBottleTotalDisplay();
+                populateEditAssignRunDropdown();
+            }
+        });
+    });
+    document.querySelectorAll('.bottle-qty-minus-edit').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const type = btn.dataset.type;
+            const input = document.getElementById('edit-bottle-qty-' + type);
+            if (input) {
+                const v = Math.max(0, (parseInt(input.value, 10) || 0) - 1);
+                input.value = v;
+                updateEditBottleTotalDisplay();
+                populateEditAssignRunDropdown();
+            }
+        });
+    });
+    
+    // Edit delivery date change: populate run dropdown
+    document.getElementById('edit-delivery-date')?.addEventListener('change', () => {
+        populateEditAssignRunDropdown();
+    });
+    
+    // Edit staff options toggle
+    document.getElementById('edit-staff-toggle')?.addEventListener('click', () => {
+        const options = document.getElementById('edit-staff-options');
+        const toggle = document.getElementById('edit-staff-toggle');
+        
+        if (options.style.display === 'none') {
+            options.style.display = 'block';
+            toggle.classList.add('expanded');
+            toggle.textContent = toggle.textContent.replace('▸', '▾');
+        } else {
+            options.style.display = 'none';
+            toggle.classList.remove('expanded');
+            toggle.textContent = toggle.textContent.replace('▾', '▸');
+        }
+    });
+    
+    // Close modal when clicking outside
+    document.getElementById('edit-order-modal')?.addEventListener('click', (e) => {
+        if (e.target.id === 'edit-order-modal') {
+            closeEditOrderModal();
+        }
+    });
     
     // ============================================
     // RESET DATA BUTTON
@@ -2395,5 +3053,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const undeliveredSearchInput = document.getElementById('undelivered-search');
     undeliveredSearchInput?.addEventListener('input', (e) => {
         renderUndeliveredOrders(e.target.value);
+    });
+    
+    // Customer history search
+    const customerHistorySearchInput = document.getElementById('customer-history-search');
+    customerHistorySearchInput?.addEventListener('input', (e) => {
+        renderCustomerHistory(e.target.value);
     });
 });
