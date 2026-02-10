@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gas Bottle Order System</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Gas Orders</h1>
+            <button type="button" class="reset-btn" id="reset-data-btn" title="Reset all data (testing only)">Reset Data</button>
+        </header>
+
+        <!-- Main View Toggle -->
+        <div class="main-view-toggle">
+            <button type="button" class="view-toggle-btn active" id="customer-view-btn">CUSTOMER</button>
+            <button type="button" class="view-toggle-btn" id="staff-view-btn">STAFF / ADMIN</button>
+        </div>
+
+        <!-- CUSTOMER VIEW (Order Entry) -->
+        <div class="view-section" id="customer-view">
+            <!-- Customer Search Section -->
+        <section class="search-section">
+            <label for="customer-search">Search Customer</label>
+            <input 
+                type="text" 
+                id="customer-search" 
+                placeholder="Search name, mobile, or address…"
+                autocomplete="off"
+            >
+            <div id="search-results" class="search-results"></div>
+        </section>
+
+        <!-- Customer Details Section -->
+        <section class="customer-section">
+            <h2>Customer Details</h2>
+            <div class="form-group">
+                <label for="customer-name">Name <span class="required">*</span></label>
+                <input type="text" id="customer-name" required>
+            </div>
+            <div class="form-group">
+                <label for="customer-mobile">Mobile <span class="required">*</span></label>
+                <input type="text" id="customer-mobile" required>
+            </div>
+            <div class="form-group">
+                <label for="customer-address">Address <span class="required">*</span></label>
+                <textarea id="customer-address" rows="2" required></textarea>
+            </div>
+        </section>
+
+        <!-- Order Details Section -->
+        <section class="order-section">
+            <h2>Order Details</h2>
+            
+            <div class="form-group">
+                <label>Bottles <span class="required">*</span></label>
+                <p class="field-hint">At least one bottle type must have quantity &gt; 0</p>
+                <div class="bottle-selector-list">
+                    <div class="bottle-row" data-type="45kg">
+                        <span class="bottle-label">45kg</span>
+                        <div class="quantity-controls">
+                            <button type="button" class="qty-btn bottle-qty-minus" data-type="45kg">−</button>
+                            <input type="number" id="bottle-qty-45kg" value="0" min="0" max="99" readonly class="bottle-qty-input">
+                            <button type="button" class="qty-btn bottle-qty-plus" data-type="45kg">+</button>
+                        </div>
+                    </div>
+                    <div class="bottle-row" data-type="8.5kg">
+                        <span class="bottle-label">8.5kg</span>
+                        <div class="quantity-controls">
+                            <button type="button" class="qty-btn bottle-qty-minus" data-type="8.5kg">−</button>
+                            <input type="number" id="bottle-qty-8.5kg" value="0" min="0" max="99" readonly class="bottle-qty-input">
+                            <button type="button" class="qty-btn bottle-qty-plus" data-type="8.5kg">+</button>
+                        </div>
+                    </div>
+                    <div class="bottle-row" data-type="Forklift 18kg">
+                        <span class="bottle-label">Forklift 18kg</span>
+                        <div class="quantity-controls">
+                            <button type="button" class="qty-btn bottle-qty-minus" data-type="Forklift 18kg">−</button>
+                            <input type="number" id="bottle-qty-Forklift 18kg" value="0" min="0" max="99" readonly class="bottle-qty-input">
+                            <button type="button" class="qty-btn bottle-qty-plus" data-type="Forklift 18kg">+</button>
+                        </div>
+                    </div>
+                    <div class="bottle-row" data-type="Forklift 15kg">
+                        <span class="bottle-label">Forklift 15kg</span>
+                        <div class="quantity-controls">
+                            <button type="button" class="qty-btn bottle-qty-minus" data-type="Forklift 15kg">−</button>
+                            <input type="number" id="bottle-qty-Forklift 15kg" value="0" min="0" max="99" readonly class="bottle-qty-input">
+                            <button type="button" class="qty-btn bottle-qty-plus" data-type="Forklift 15kg">+</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="bottle-total-display" class="bottle-total-display">Total: 0 bottles</div>
+            </div>
+
+            <div class="form-group">
+                <label>Preferred Delivery Day</label>
+                <div class="radio-group">
+                    <label class="radio-label">
+                        <input type="radio" name="preferred-day" value="Tuesday">
+                        Tuesday
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="preferred-day" value="Friday">
+                        Friday
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="preferred-day" value="Any" checked>
+                        Any
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="order-notes">Order Notes (Optional)</label>
+                <textarea id="order-notes" rows="3" placeholder="Gate codes, dogs on site, access instructions..."></textarea>
+            </div>
+        </section>
+
+        <!-- Staff Options Section (Collapsed) -->
+        <section class="staff-section">
+            <button type="button" class="staff-toggle" id="staff-toggle">
+                Staff options ▸
+            </button>
+            <div class="staff-options" id="staff-options" style="display: none;">
+                <div class="form-group">
+                    <label for="delivery-date">Delivery Date</label>
+                    <input type="date" id="delivery-date">
+                </div>
+                <div class="form-group">
+                    <label for="assign-run">Assign to Run</label>
+                    <select id="assign-run">
+                        <option value="">Auto</option>
+                    </select>
+                    <p class="field-hint" id="assign-run-hint">Select a date to see runs. Max 8 bottles per run.</p>
+                </div>
+                <div class="form-group">
+                    <label for="invoice-number">Invoice Number</label>
+                    <input type="text" id="invoice-number">
+                </div>
+            </div>
+        </section>
+
+        <!-- Save Button -->
+        <section class="save-section">
+            <button type="button" class="save-btn" id="save-order">SAVE ORDER</button>
+            <div id="save-message" class="save-message"></div>
+        </section>
+        </div>
+
+        <!-- STAFF / ADMIN VIEW -->
+        <div class="view-section" id="staff-view" style="display: none;">
+            <section class="staff-admin-section">
+                <div class="staff-admin-content">
+                    
+                    <!-- Navigation Tabs -->
+                    <div class="staff-tabs">
+                        <button class="staff-tab" data-tab="stock-count">Stock Count</button>
+                        <button class="staff-tab active" data-tab="undelivered">Undelivered Orders</button>
+                        <button class="staff-tab" data-tab="run-builder">Run Builder</button>
+                        <button class="staff-tab" data-tab="generated-runs">Generated Runs</button>
+                        <button class="staff-tab" data-tab="daily-view">Daily/Weekly View</button>
+                        <button class="staff-tab" data-tab="csv-tools">CSV Tools</button>
+                        <button class="staff-tab" data-tab="tencia">Tencia</button>
+                    </div>
+
+                <!-- Undelivered Orders Tab -->
+                <div class="staff-tab-content active" id="tab-undelivered">
+                    <h3>Undelivered Bottles / Unassigned Orders</h3>
+                    
+                    <!-- Summary Strip -->
+                    <div id="undelivered-summary-strip" class="summary-strip"></div>
+                    
+                    <div class="undelivered-search">
+                        <label for="undelivered-search">Search Orders</label>
+                        <input 
+                            type="text" 
+                            id="undelivered-search" 
+                            placeholder="Search by customer name, mobile, or address..."
+                            autocomplete="off"
+                        >
+                    </div>
+                    
+                    <div id="undelivered-orders-table" class="undelivered-table-container"></div>
+                </div>
+
+                <!-- Generated Runs Tab -->
+                <div class="staff-tab-content" id="tab-generated-runs">
+                    <h3>Generated Runs / Delivery History</h3>
+                    <div id="generated-runs-list" class="generated-runs-list"></div>
+                    <div id="run-detail-view" class="run-detail-view" style="display: none;"></div>
+                </div>
+
+                <!-- Daily/Weekly View Tab -->
+                <div class="staff-tab-content" id="tab-daily-view">
+                    <h3>Daily & Weekly View</h3>
+                    
+                    <!-- Weekly Overview -->
+                    <div class="weekly-overview">
+                        <h4>Weekly Overview</h4>
+                        <div class="week-selector">
+                            <button id="prev-week">← Prev Week</button>
+                            <span id="week-range"></span>
+                            <button id="next-week">Next Week →</button>
+                        </div>
+                        <div id="weekly-grid" class="weekly-grid"></div>
+                    </div>
+
+                    <!-- Daily View -->
+                    <div class="daily-view">
+                        <h4>Daily View</h4>
+                        <div class="form-group">
+                            <label for="daily-view-date">Select Date</label>
+                            <input type="date" id="daily-view-date">
+                        </div>
+                        <div id="daily-orders" class="daily-orders-table"></div>
+                    </div>
+                </div>
+
+                <!-- Run Builder Tab -->
+                <div class="staff-tab-content" id="tab-run-builder">
+                    <h3>Run Builder</h3>
+                    <div class="form-group">
+                        <label for="run-date">Delivery Date</label>
+                        <input type="date" id="run-date">
+                    </div>
+                    <div id="run-builder-content"></div>
+                </div>
+
+                <!-- Stock Count Tab -->
+                <div class="staff-tab-content" id="tab-stock-count">
+                    <h3>Stock Count</h3>
+                    <p class="section-description">Undelivered bottle totals for stock counting</p>
+                    <div id="stock-summary" class="stock-summary"></div>
+                </div>
+
+                <!-- CSV Tools Tab -->
+                <div class="staff-tab-content" id="tab-csv-tools">
+                    <h3>CSV Import / Export</h3>
+                    
+                    <div class="csv-section">
+                        <h4>Export</h4>
+                        <div class="csv-export-buttons">
+                            <button id="export-customers">Export All Customers</button>
+                            <button id="export-orders">Export All Orders</button>
+                            <button id="export-orders-date">Export Orders by Date</button>
+                            <button id="export-orders-run">Export Orders by Run</button>
+                            <button id="export-undelivered">Export Undelivered Orders</button>
+                        </div>
+                    </div>
+
+                    <div class="csv-section">
+                        <h4>Import</h4>
+                        <div class="form-group">
+                            <label for="csv-file">Select CSV File</label>
+                            <input type="file" id="csv-file" accept=".csv">
+                        </div>
+                        <div class="form-group">
+                            <label>Import Type</label>
+                            <div class="radio-group">
+                                <label class="radio-label">
+                                    <input type="radio" name="import-type" value="customers" checked>
+                                    Customers
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="import-type" value="orders">
+                                    Orders
+                                </label>
+                            </div>
+                        </div>
+                        <button id="import-csv">Import CSV</button>
+                        <div id="import-message" class="import-message"></div>
+                    </div>
+                </div>
+
+                <!-- Tencia Integration Tab -->
+                <div class="staff-tab-content" id="tab-tencia">
+                    <h3>Tencia Integration</h3>
+                    <div class="tencia-placeholder">
+                        <p><strong>Coming Soon</strong></p>
+                        <p>This section will integrate with Tencia for invoicing and order management.</p>
+                        <p>For now, use CSV export to prepare data for invoicing.</p>
+                        <button id="export-tencia-format">Export CSV for Tencia</button>
+                    </div>
+                </div>
+
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
