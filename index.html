@@ -35,7 +35,31 @@
     <div class="container">
         <header>
             <img src="cowaglogo.png" alt="Company Logo" class="header-logo">
-            <button type="button" class="reset-btn" id="reset-data-btn" title="Reset all data (testing only)">Reset Data</button>
+            <div class="settings-container">
+                <button type="button" class="settings-icon-btn" id="settings-icon-btn" title="Settings">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M12 1v6m0 6v6m9-9h-6m-6 0H3m15.364-6.364l-4.243 4.243m0-8.485l4.243 4.243M4.636 19.364l4.243-4.243m0 8.485l-4.243-4.243"></path>
+                    </svg>
+                </button>
+                <div class="settings-menu" id="settings-menu" style="display: none;">
+                    <button type="button" class="settings-menu-item" id="logout-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                            <polyline points="16 17 21 12 16 7"></polyline>
+                            <line x1="21" y1="12" x2="9" y2="12"></line>
+                        </svg>
+                        Logout
+                    </button>
+                    <button type="button" class="settings-menu-item settings-menu-item-danger" id="reset-data-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                        Reset Data
+                    </button>
+                </div>
+            </div>
         </header>
 
         <!-- Main View Toggle -->

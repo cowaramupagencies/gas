@@ -173,13 +173,26 @@ async function loadOrders() {
 
 // Save order to Firestore
 async function saveOrder(order) {
-    if (!db) return;
+    if (!db) {
+        throw new Error('Firebase not initialized');
+    }
+    
+    // Ensure order has all required fields
+    const orderToSave = {
+        ...order,
+        delivered: order.delivered !== undefined ? order.delivered : false,
+        createdAt: order.createdAt || new Date().toISOString(),
+        status: order.status || (order.runId ? 'Assigned' : 'Unassigned')
+    };
+    
     try {
         const { doc, setDoc } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js');
-        const orderRef = doc(db, 'orders', order.id);
-        await setDoc(orderRef, order);
+        const orderRef = doc(db, 'orders', orderToSave.id);
+        await setDoc(orderRef, orderToSave);
+        console.log('[DEBUG] Order successfully written to Firestore:', orderToSave.id);
+        return orderToSave;
     } catch (error) {
-        console.error('Error saving order:', error);
+        console.error('[DEBUG] Error saving order to Firestore:', error);
         throw error;
     }
 }
@@ -348,26 +361,37 @@ let unsubscribeManifests = null;
 
 // Setup real-time listeners
 async function setupRealtimeListeners() {
-    if (!db) return;
+    if (!db) {
+        console.error('[DEBUG] Cannot setup listeners - db not initialized');
+        return;
+    }
+    
+    console.log('[DEBUG] Setting up Firestore real-time listeners...');
     
     try {
         const { collection, onSnapshot } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js');
         
+        console.log('[DEBUG] Firestore modules loaded, creating listeners...');
+        
         // Customers listener
         unsubscribeCustomers = onSnapshot(collection(db, 'customers'), (snapshot) => {
             customersState = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            console.log('[DEBUG] Customers listener fired. Customers count:', customersState.length);
             // Trigger UI updates if needed
-            if (typeof renderUndeliveredOrders === 'function') {
-                const searchQuery = document.getElementById('undelivered-search')?.value || '';
-                renderUndeliveredOrders(searchQuery);
-            }
+            refreshAllViews();
+        }, (error) => {
+            console.error('[DEBUG] Customers listener error:', error);
         });
         
         // Orders listener
         unsubscribeOrders = onSnapshot(collection(db, 'orders'), (snapshot) => {
-            ordersState = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const newOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            console.log('[DEBUG] Orders listener fired. Orders count:', newOrders.length);
+            ordersState = newOrders;
             // Trigger UI updates
             refreshAllViews();
+        }, (error) => {
+            console.error('[DEBUG] Orders listener error:', error);
         });
         
         // Runs listener
@@ -380,17 +404,31 @@ async function setupRealtimeListeners() {
         unsubscribeManifests = onSnapshot(collection(db, 'manifests'), (snapshot) => {
             manifestsState = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             refreshAllViews();
+        }, (error) => {
+            console.error('[DEBUG] Manifests listener error:', error);
         });
+        
+        console.log('[DEBUG] All real-time listeners registered successfully');
+        console.log('[DEBUG] Initial orders count:', ordersState.length);
+        
+        // Trigger initial refresh after listeners are set up
+        setTimeout(() => {
+            console.log('[DEBUG] Triggering initial view refresh');
+            refreshAllViews();
+        }, 100);
     } catch (error) {
-        console.error('Error setting up real-time listeners:', error);
+        console.error('[DEBUG] Error setting up real-time listeners:', error);
     }
 }
 
 // Refresh all views when data changes
 function refreshAllViews() {
-    // Refresh undelivered orders
+    console.log('[DEBUG] refreshAllViews called. Orders in state:', ordersState.length);
+    
+    // Refresh undelivered orders (always refresh this - it's the main view)
     if (typeof renderUndeliveredOrders === 'function') {
         const searchQuery = document.getElementById('undelivered-search')?.value || '';
+        console.log('[DEBUG] Refreshing undelivered orders. Current orders:', getOrders().length);
         renderUndeliveredOrders(searchQuery);
     }
     
@@ -471,12 +509,15 @@ function getOrderTrailerBottles(order) {
     return bottles['45kg'] || 0;
 }
 
-// Human-readable bottle breakdown for display (e.g. "45kg ×1, Forklift ×2")
+// Human-readable bottle breakdown for display (e.g. "1 x 45kg, 2 x 8.5kg")
 function formatBottleBreakdown(order) {
     const b = getOrderBottles(order);
     const parts = [];
     BOTTLE_TYPES.forEach(t => {
-        if (b[t] > 0) parts.push(t + ' ×' + b[t]);
+        if (b[t] > 0) {
+            // Format as "quantity x type" (e.g. "1 x 45kg")
+            parts.push(b[t] + ' x ' + t);
+        }
     });
     return parts.length ? parts.join(', ') : '—';
 }
@@ -781,59 +822,76 @@ async function handleSaveOrder() {
     // Find or create customer
     const customer = await findOrCreateCustomer(name, mobile, address);
     
-    // Create order
+    // Create order - ensure all required fields are set
     const order = {
         id: generateId(),
         customerId: customer.id,
         bottles: bottles,
         totalBottleCount: totalBottleCount,
         preferredDay: preferredDay,
-        deliveryDate: deliveryDate,
-        invoiceNumber: invoiceNumber,
-        notes: orderNotes,
+        deliveryDate: deliveryDate || null, // Explicitly set to null if empty
+        invoiceNumber: invoiceNumber || null,
+        notes: orderNotes || '',
         status: runId ? 'Assigned' : 'Unassigned',
-        runId: runId,
-        delivered: false,
+        runId: runId || null, // Explicitly set to null if not assigned
+        delivered: false, // CRITICAL: Must be false for undelivered orders
         deliveredAt: null,
         deliveredRunId: null,
         createdAt: new Date().toISOString()
     };
     
-    // Save order to Firestore
-    await saveOrder(order);
+    console.log('[DEBUG] Creating order:', {
+        id: order.id,
+        customerId: order.customerId,
+        delivered: order.delivered,
+        runId: order.runId,
+        deliveryDate: order.deliveryDate,
+        status: order.status
+    });
     
-    // Update customer order history
-    customer.orderHistory = customer.orderHistory || [];
-    customer.orderHistory.push(order.id);
-    await saveCustomer(customer);
-    
-    // Update customer notes if order notes provided
-    if (orderNotes) {
-        await updateCustomerNotes(customer.id, orderNotes);
-    }
-    
-    // Update run if assigned
-    if (runId) {
-        const runs = getRuns();
-        const run = runs.find(r => r.id === runId);
-        if (run) {
-            if (!run.orderIds) run.orderIds = [];
-            if (!run.orderIds.includes(order.id)) {
-                run.orderIds.push(order.id);
-                await saveRun(run);
+    try {
+        // Save order to Firestore (this will trigger the real-time listener)
+        await saveOrder(order);
+        console.log('[DEBUG] Order saved to Firestore:', order.id);
+        
+        // Update customer order history
+        customer.orderHistory = customer.orderHistory || [];
+        customer.orderHistory.push(order.id);
+        await saveCustomer(customer);
+        
+        // Update customer notes if order notes provided
+        if (orderNotes) {
+            await updateCustomerNotes(customer.id, orderNotes);
+        }
+        
+        // Update run if assigned
+        if (runId) {
+            const runs = getRuns();
+            const run = runs.find(r => r.id === runId);
+            if (run) {
+                if (!run.orderIds) run.orderIds = [];
+                if (!run.orderIds.includes(order.id)) {
+                    run.orderIds.push(order.id);
+                    await saveRun(run);
+                }
             }
         }
+        
+        // Show success message
+        showMessage('Order saved successfully!', 'success');
+        
+        // Note: Don't manually refresh UI here - the real-time listener will handle it
+        // The listener will update ordersState and call refreshAllViews() automatically
+        
+        // Reset form after short delay
+        setTimeout(() => {
+            resetForm();
+        }, 1500);
+    } catch (error) {
+        console.error('[DEBUG] Error saving order:', error);
+        showMessage('Error saving order: ' + error.message, 'error');
+        // Don't reset form on error - let user fix and retry
     }
-    
-    showMessage('Order saved successfully!', 'success');
-    
-    // Refresh undelivered orders display
-    renderUndeliveredOrders();
-    
-    // Reset form after short delay
-    setTimeout(() => {
-        resetForm();
-    }, 1500);
 }
 
 // Reset form
@@ -1562,7 +1620,7 @@ function downloadManifestPDF(manifest) {
                             <td>${escapeHtml(stop.customerName || '')}</td>
                             <td>${escapeHtml(stop.address || '')}</td>
                             <td>${escapeHtml(stop.mobile || '')}</td>
-                            <td>${escapeHtml(stop.bottleBreakdown || (stop.bottleType ? stop.bottleType + ' x' + stop.quantity : stop.quantity || ''))}</td>
+                            <td>${escapeHtml(stop.bottleBreakdown || (stop.bottleType ? stop.quantity + ' x ' + stop.bottleType : stop.quantity || ''))}</td>
                             <td>${stop.quantity || 0}</td>
                             <td style="min-width: 120px;">${escapeHtml(stop.notes || '')}</td>
                             <td>${escapeHtml(stop.invoiceNumber || '')}</td>
@@ -1580,7 +1638,10 @@ function downloadManifestPDF(manifest) {
                 <div class="footer-row">
                     <div>
                         <strong>Breakdown:</strong><br>
-                        ${BOTTLE_TYPES.map(t => `${t} x ${data.breakdown[t] || 0}`).join('<br>')}
+                        ${BOTTLE_TYPES.map(t => {
+                            const qty = data.breakdown[t] || 0;
+                            return qty > 0 ? `${qty} x ${t}` : '';
+                        }).filter(Boolean).join('<br>')}
                     </div>
                     <div>
                         <strong>Vehicle Type:</strong> _____________<br>
@@ -2484,7 +2545,34 @@ window.overrideManifest = overrideManifest;
 // ============================================
 
 async function resetAllData() {
-    if (!confirm('This will delete all customers and orders. Continue?')) {
+    if (!confirm('This will delete ALL customers, orders, runs, and manifests. This action cannot be undone. Continue?')) {
+        return;
+    }
+    
+    // Require re-authentication
+    if (!auth || !auth.currentUser) {
+        alert('You must be logged in to reset data.');
+        return;
+    }
+    
+    // Prompt for password to re-authenticate
+    const password = prompt('Please enter your password to confirm this action:');
+    if (!password) {
+        return;
+    }
+    
+    try {
+        // Re-authenticate user
+        const { reauthenticateWithCredential, EmailAuthProvider } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js');
+        const email = auth.currentUser.email;
+        const credential = EmailAuthProvider.credential(email, password);
+        await reauthenticateWithCredential(auth.currentUser, credential);
+    } catch (error) {
+        if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') {
+            alert('Incorrect password. Reset cancelled.');
+        } else {
+            alert('Authentication failed: ' + error.message);
+        }
         return;
     }
     
@@ -2536,10 +2624,14 @@ async function resetAllData() {
 // Get all undelivered orders
 function getUndeliveredOrders() {
     const orders = getOrders();
-    return orders.filter(order => {
+    console.log('[DEBUG] getUndeliveredOrders - Total orders:', orders.length);
+    const undelivered = orders.filter(order => {
         // Order is undelivered if not marked as delivered
-        return !order.delivered && order.status !== 'Delivered';
+        const isUndelivered = !order.delivered && order.status !== 'Delivered';
+        return isUndelivered;
     });
+    console.log('[DEBUG] getUndeliveredOrders - Undelivered count:', undelivered.length);
+    return undelivered;
 }
 
 // Filter undelivered orders by search query
@@ -2606,12 +2698,16 @@ function renderUndeliveredSummary() {
 // Render undelivered orders table
 function renderUndeliveredOrders(searchQuery = '') {
     const container = document.getElementById('undelivered-orders-table');
-    if (!container) return;
+    if (!container) {
+        console.log('[DEBUG] renderUndeliveredOrders - Container not found');
+        return;
+    }
     
     // Update summary strip
     renderUndeliveredSummary();
     
     let orders = getUndeliveredOrders();
+    console.log('[DEBUG] renderUndeliveredOrders - Rendering', orders.length, 'orders');
     
     // Apply search filter if provided
     if (searchQuery) {
@@ -3225,8 +3321,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initialize app (only runs if user is logged in)
     async function initializeApp() {
         // Prevent multiple initializations
-        if (window.appInitialized) return;
+        if (window.appInitialized) {
+            console.log('[DEBUG] App already initialized, skipping');
+            return;
+        }
         window.appInitialized = true;
+        console.log('[DEBUG] Initializing app...');
         
         // Ensure main app is visible
         const mainApp = document.getElementById('main-app');
@@ -3237,8 +3337,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Small delay to ensure DOM is fully ready
         await new Promise(resolve => setTimeout(resolve, 50));
         
-        // Set up real-time listeners
+        // Set up real-time listeners (CRITICAL - this enables reactive updates)
+        console.log('[DEBUG] Setting up real-time listeners...');
         await setupRealtimeListeners();
+        console.log('[DEBUG] Real-time listeners set up. Current orders:', ordersState.length);
     
     // Customer search functionality
     const searchInput = document.getElementById('customer-search');
@@ -3341,14 +3443,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
     }
     
+    // Store references to actual DOM elements (will be updated after cloning)
+    let activeCustomerBtn = customerViewBtn;
+    let activeStaffBtn = staffViewBtn;
+    
     function switchToCustomerView() {
         if (customerView && staffView) {
             customerView.style.display = 'block';
             staffView.style.display = 'none';
         }
-        if (customerViewBtn && staffViewBtn) {
-            customerViewBtn.classList.add('active');
-            staffViewBtn.classList.remove('active');
+        // Get fresh references to buttons (in case they were cloned)
+        const customerBtn = document.getElementById('customer-view-btn');
+        const staffBtn = document.getElementById('staff-view-btn');
+        if (customerBtn && staffBtn) {
+            customerBtn.classList.add('active');
+            staffBtn.classList.remove('active');
+            activeCustomerBtn = customerBtn;
+            activeStaffBtn = staffBtn;
         }
         // Focus on search input when switching to customer view
         setTimeout(() => {
@@ -3361,15 +3472,23 @@ document.addEventListener('DOMContentLoaded', async () => {
             customerView.style.display = 'none';
             staffView.style.display = 'block';
         }
-        if (customerViewBtn && staffViewBtn) {
-            customerViewBtn.classList.remove('active');
-            staffViewBtn.classList.add('active');
+        // Get fresh references to buttons (in case they were cloned)
+        const customerBtn = document.getElementById('customer-view-btn');
+        const staffBtn = document.getElementById('staff-view-btn');
+        if (customerBtn && staffBtn) {
+            customerBtn.classList.remove('active');
+            staffBtn.classList.add('active');
+            activeCustomerBtn = customerBtn;
+            activeStaffBtn = staffBtn;
         }
-        // Load undelivered orders when switching to staff view (it's the default active tab)
-        const activeTab = document.querySelector('.staff-tab.active')?.dataset.tab;
-        if (activeTab === 'undelivered' || !activeTab) {
-            renderUndeliveredOrders();
-        }
+        // Always refresh undelivered orders when switching to staff view
+        // This ensures we have the latest data from ordersState
+        console.log('[DEBUG] Switching to Staff view. Refreshing undelivered orders.');
+        const searchQuery = document.getElementById('undelivered-search')?.value || '';
+        renderUndeliveredOrders(searchQuery);
+        
+        // Also refresh other views that might be visible
+        refreshAllViews();
     }
     
     // Remove any existing listeners by cloning (clean slate)
@@ -3381,6 +3500,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     const newStaffBtn = staffViewBtn.cloneNode(true);
     staffBtnParent.replaceChild(newStaffBtn, staffViewBtn);
+    
+    // Set initial active state (Customer view is default)
+    newCustomerBtn.classList.add('active');
+    newStaffBtn.classList.remove('active');
     
     // Attach event listeners to the new nodes
     newCustomerBtn.addEventListener('click', (e) => {
@@ -3556,9 +3679,53 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     
     // ============================================
+    // SETTINGS MENU
+    // ============================================
+    const settingsIconBtn = document.getElementById('settings-icon-btn');
+    const settingsMenu = document.getElementById('settings-menu');
+    
+    // Toggle settings menu
+    if (settingsIconBtn && settingsMenu) {
+        settingsIconBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isVisible = settingsMenu.style.display !== 'none';
+            settingsMenu.style.display = isVisible ? 'none' : 'block';
+        });
+        
+        // Close menu when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!settingsIconBtn.contains(e.target) && !settingsMenu.contains(e.target)) {
+                settingsMenu.style.display = 'none';
+            }
+        });
+    }
+    
+    // ============================================
     // RESET DATA BUTTON
     // ============================================
-    document.getElementById('reset-data-btn')?.addEventListener('click', resetAllData);
+    document.getElementById('reset-data-btn')?.addEventListener('click', async () => {
+        // Close settings menu
+        if (settingsMenu) settingsMenu.style.display = 'none';
+        await resetAllData();
+    });
+    
+    // ============================================
+    // LOGOUT BUTTON
+    // ============================================
+    document.getElementById('logout-btn')?.addEventListener('click', async () => {
+        // Close settings menu
+        if (settingsMenu) settingsMenu.style.display = 'none';
+        
+        if (!auth) return;
+        try {
+            const { signOut } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js');
+            await signOut(auth);
+            // Auth state change will handle UI update
+        } catch (error) {
+            console.error('Logout error:', error);
+            alert('Error logging out: ' + error.message);
+        }
+    });
     
     // ============================================
     // UNDELIVERED BOTTLES SECTION

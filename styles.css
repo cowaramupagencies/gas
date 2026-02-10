@@ -114,28 +114,85 @@ header {
     object-fit: contain;
 }
 
-.reset-btn {
+/* ============================================================================
+   SETTINGS MENU
+   ============================================================================ */
+
+.settings-container {
     position: absolute;
     top: var(--space-lg);
     right: var(--space-xl);
-    padding: var(--space-sm) var(--space-md);
-    background: var(--status-danger);
-    color: var(--neutral-50);
-    border: none;
-    border-radius: var(--border-radius-sm);
-    font-size: var(--font-size-xs);
-    font-weight: 600;
+    display: flex;
+    align-items: center;
+}
+
+.settings-icon-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: var(--border-radius-md);
+    padding: var(--space-sm);
+    color: white;
     cursor: pointer;
+    transition: all var(--transition-base);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.settings-icon-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.5);
+}
+
+.settings-icon-btn:focus {
+    outline: 2px solid white;
+    outline-offset: 2px;
+}
+
+.settings-menu {
+    position: absolute;
+    top: calc(100% + var(--space-sm));
+    right: 0;
+    background: white;
+    border-radius: var(--border-radius-md);
+    box-shadow: var(--shadow-lg);
+    min-width: 180px;
+    padding: var(--space-xs);
+    z-index: 1000;
+    border: 1px solid var(--border-color);
+}
+
+.settings-menu-item {
+    width: 100%;
+    padding: var(--space-md);
+    background: none;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    color: var(--neutral-700);
+    font-size: var(--font-size-sm);
+    border-radius: var(--border-radius-sm);
     transition: background-color var(--transition-base);
 }
 
-.reset-btn:hover {
-    background: #b91c1c;
+.settings-menu-item:hover {
+    background: var(--neutral-100);
 }
 
-.reset-btn:focus {
-    outline: 2px solid var(--status-danger);
-    outline-offset: 2px;
+.settings-menu-item-danger {
+    color: var(--status-danger);
+}
+
+.settings-menu-item-danger:hover {
+    background: var(--status-danger-light);
+    color: var(--status-danger-dark);
+}
+
+.settings-menu-item svg {
+    flex-shrink: 0;
 }
 
 /* ============================================================================
