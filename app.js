@@ -2539,6 +2539,7 @@ window.removeRun = removeRun;
 window.createNewRun = createNewRun;
 window.downloadManifestPDF = downloadManifestPDF;
 window.overrideManifest = overrideManifest;
+window.deleteUndeliveredOrder = deleteUndeliveredOrder;
 
 // ============================================
 // RESET DATA FUNCTION (TESTING ONLY)
@@ -2616,687 +2617,181 @@ async function resetAllData() {
         alert('Error resetting data: ' + error.message);
     }
 }
+async function deleteUndeliveredOrder(orderId) {
+    if (!confirm('Delete this order permanently?')) return;
+
+    const order = getOrders().find(o => o.id === orderId);
+    if (!order) {
+        alert('Order not found');
+        return;
+    }
+
+    try {
+        // If assigned to a run, remove from that run first
+        if (order.runId) {
+            const run = getRuns().find(r => r.id === order.runId);
+            if (run && run.orderIds) {
+                run.orderIds = run.orderIds.filter(id => id !== orderId);
+                await saveRun(run);
+            }
+        }
+
+        // Remove from customer history
+        const customer = getCustomerById(order.customerId);
+        if (customer && customer.orderHistory) {
+            customer.orderHistory = customer.orderHistory.filter(id => id !== orderId);
+            await saveCustomer(customer);
+        }
+
+        // Delete from Firestore
+        await deleteDocument('orders', orderId);
+
+        showMessage('Order deleted', 'success');
+
+    } catch (error) {
+        console.error(error);
+        alert('Delete failed');
+    }
+}
 
 // ============================================
-// UNDELIVERED BOTTLES SECTION FUNCTIONS
+// UNDELIVERED BOTTLES SECTION FUNCTIONS (CLEAN VERSION)
 // ============================================
 
 // Get all undelivered orders
 function getUndeliveredOrders() {
-    const orders = getOrders();
-    console.log('[DEBUG] getUndeliveredOrders - Total orders:', orders.length);
-    const undelivered = orders.filter(order => {
-        // Order is undelivered if not marked as delivered
-        const isUndelivered = !order.delivered && order.status !== 'Delivered';
-        return isUndelivered;
-    });
-    console.log('[DEBUG] getUndeliveredOrders - Undelivered count:', undelivered.length);
-    return undelivered;
+    return getOrders().filter(order =>
+        !order.delivered && order.status !== 'Delivered'
+    );
 }
 
-// Filter undelivered orders by search query
-function filterUndeliveredOrders(orders, query) {
-    if (!query || query.trim().length === 0) {
-        return orders;
-    }
-    
-    const lowerQuery = query.toLowerCase().trim();
-    const customers = getCustomers();
-    
-    return orders.filter(order => {
-        const customer = getCustomerById(order.customerId);
-        if (!customer) return false;
-        
-        const nameMatch = customer.name.toLowerCase().includes(lowerQuery);
-        const mobileMatch = customer.mobile.toLowerCase().includes(lowerQuery);
-        const addressMatch = customer.address.toLowerCase().includes(lowerQuery);
-        
-        return nameMatch || mobileMatch || addressMatch;
-    });
-}
-
-// Render undelivered orders summary strip
+// Render summary strip
 function renderUndeliveredSummary() {
     const container = document.getElementById('undelivered-summary-strip');
     if (!container) return;
-    
+
     const orders = getUndeliveredOrders();
-    const totalBottles = orders.reduce((sum, order) => sum + getOrderTotalBottles(order), 0);
-    
-    const breakdown = {
-        '45kg': orders.reduce((s, o) => s + getOrderBottles(o)['45kg'], 0),
-        '8.5kg': orders.reduce((s, o) => s + getOrderBottles(o)['8.5kg'], 0),
-        'Forklift': orders.reduce((s, o) => s + getOrderBottles(o)['Forklift'], 0)
+
+    const totals = {
+        totalOrders: orders.length,
+        totalBottles: 0,
+        '45kg': 0,
+        '8.5kg': 0,
+        'Forklift 18kg': 0,
+        'Forklift 15kg': 0
     };
-    
+
+    orders.forEach(order => {
+        const bottles = getOrderBottles(order);
+        BOTTLE_TYPES.forEach(type => {
+            totals[type] += bottles[type] || 0;
+        });
+        totals.totalBottles += getOrderTotalBottles(order);
+    });
+
+    const forkliftTotal = totals['Forklift 18kg'] + totals['Forklift 15kg'];
+
     container.innerHTML = `
         <div class="summary-strip-grid">
             <div class="summary-card">
-                <div class="summary-label">Total Orders</div>
-                <div class="summary-value">${orders.length}</div>
+                <div class="summary-label">Orders</div>
+                <div class="summary-value">${totals.totalOrders}</div>
             </div>
             <div class="summary-card">
                 <div class="summary-label">Total Bottles</div>
-                <div class="summary-value">${totalBottles}</div>
+                <div class="summary-value">${totals.totalBottles}</div>
             </div>
             <div class="summary-card">
                 <div class="summary-label">45kg</div>
-                <div class="summary-value">${breakdown['45kg']}</div>
+                <div class="summary-value">${totals['45kg']}</div>
             </div>
             <div class="summary-card">
                 <div class="summary-label">8.5kg</div>
-                <div class="summary-value">${breakdown['8.5kg']}</div>
+                <div class="summary-value">${totals['8.5kg']}</div>
             </div>
             <div class="summary-card">
-                <div class="summary-label">Forklift</div>
-                <div class="summary-value">${breakdown['Forklift']}</div>
+                <div class="summary-label">Forklift (15/18kg)</div>
+                <div class="summary-value">${forkliftTotal}</div>
             </div>
         </div>
     `;
 }
 
-// Render undelivered orders table
+// Render table
 function renderUndeliveredOrders(searchQuery = '') {
     const container = document.getElementById('undelivered-orders-table');
-    if (!container) {
-        console.log('[DEBUG] renderUndeliveredOrders - Container not found');
-        return;
-    }
-    
-    // Update summary strip
+    if (!container) return;
+
     renderUndeliveredSummary();
-    
+
     let orders = getUndeliveredOrders();
-    console.log('[DEBUG] renderUndeliveredOrders - Rendering', orders.length, 'orders');
-    
-    // Apply search filter if provided
+
     if (searchQuery) {
         orders = filterUndeliveredOrders(orders, searchQuery);
     }
-    
+
     if (orders.length === 0) {
-        container.innerHTML = '<p class="no-orders-message">No undelivered orders found.</p>';
+        container.innerHTML = '<p class="no-orders-message">No undelivered orders.</p>';
         return;
     }
-    
-    const customers = getCustomers();
-    
+
     let html = `
         <div class="undelivered-table-wrapper">
-            <table class="undelivered-table">
-                <thead>
-                    <tr>
-                        <th>Customer Name</th>
-                        <th>Mobile</th>
-                        <th>Address</th>
-                        <th>Bottle Type</th>
-                        <th>Quantity</th>
-                        <th>Preferred Day</th>
-                        <th>Current Delivery Date</th>
-                        <th>Assign Delivery Date</th>
-                        <th>Notes</th>
-                        <th>Invoice #</th>
-                    </tr>
-                </thead>
-                <tbody>
+        <table class="undelivered-table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Mobile</th>
+                <th>Address</th>
+                <th>Bottles</th>
+                <th>Qty</th>
+                <th>Preferred</th>
+                <th>Delivery Date</th>
+                <th>Assign Date</th>
+                <th>Invoice</th>
+                <th>Delete</th>
+            </tr>
+        </thead>
+        <tbody>
     `;
-    
+
     orders.forEach(order => {
         const customer = getCustomerById(order.customerId);
         if (!customer) return;
-        
-        const preferredDay = order.preferredDay || 'Any';
-        const currentDeliveryDate = order.deliveryDate || '';
-        const notes = order.notes || '';
-        const invoiceNumber = order.invoiceNumber || '';
-        
+
         html += `
-            <tr data-order-id="${order.id}" class="order-row-clickable" onclick="openEditOrderModal('${order.id}')" style="cursor: pointer;">
+            <tr onclick="openEditOrderModal('${order.id}')">
                 <td>${escapeHtml(customer.name)}</td>
                 <td>${escapeHtml(customer.mobile)}</td>
                 <td>${escapeHtml(customer.address)}</td>
                 <td>${escapeHtml(formatBottleBreakdown(order))}</td>
                 <td>${getOrderTotalBottles(order)}</td>
-                <td>${escapeHtml(preferredDay)}</td>
-                <td>${currentDeliveryDate ? formatDate(currentDeliveryDate) : '<span class="no-date">No date</span>'}</td>
+                <td>${escapeHtml(order.preferredDay || 'Any')}</td>
+                <td>${order.deliveryDate ? formatDate(order.deliveryDate) : '-'}</td>
                 <td>
-                    <input 
-                        type="date" 
-                        class="assign-delivery-date" 
-                        data-order-id="${order.id}"
-                        value="${currentDeliveryDate}"
+                    <input type="date"
+                        value="${order.deliveryDate || ''}"
                         onclick="event.stopPropagation();"
-                        onchange="assignDeliveryDateToOrder('${order.id}', this.value); event.stopPropagation();"
-                    >
+                        onchange="assignDeliveryDateToOrder('${order.id}', this.value); event.stopPropagation();">
                 </td>
-                <td class="notes-cell">${escapeHtml(notes)}</td>
-                <td>${escapeHtml(invoiceNumber)}</td>
+                <td>${escapeHtml(order.invoiceNumber || '')}</td>
+                <td onclick="event.stopPropagation();">
+                    <button class="delete-btn"
+                        onclick="deleteUndeliveredOrder('${order.id}');">
+                        Delete
+                    </button>
+                </td>
             </tr>
         `;
     });
-    
+
     html += `
-                </tbody>
-            </table>
-        </div>
-        <div class="undelivered-summary">
-            <strong>Total undelivered orders: ${orders.length}</strong>
+        </tbody>
+        </table>
         </div>
     `;
-    
+
     container.innerHTML = html;
-}
-
-// Open edit order modal
-function openEditOrderModal(orderId) {
-    const orders = getOrders();
-    const order = orders.find(o => o.id === orderId);
-    if (!order) {
-        alert('Order not found');
-        return;
-    }
-    
-    const customer = getCustomerById(order.customerId);
-    if (!customer) {
-        alert('Customer not found');
-        return;
-    }
-    
-    // Populate form fields
-    document.getElementById('edit-order-id').value = order.id;
-    document.getElementById('edit-customer-name').value = customer.name;
-    document.getElementById('edit-customer-mobile').value = customer.mobile;
-    document.getElementById('edit-customer-address').value = customer.address;
-    
-    // Set bottle quantities
-    const bottles = getOrderBottles(order);
-    BOTTLE_TYPES.forEach(type => {
-        const input = document.getElementById('edit-bottle-qty-' + type);
-        if (input) input.value = bottles[type] || 0;
-    });
-    updateEditBottleTotalDisplay();
-    
-    // Set preferred day
-    const preferredDay = order.preferredDay || 'Any';
-    document.querySelector(`input[name="edit-preferred-day"][value="${preferredDay}"]`).checked = true;
-    
-    // Set notes
-    document.getElementById('edit-order-notes').value = order.notes || '';
-    
-    // Set staff options
-    document.getElementById('edit-delivery-date').value = order.deliveryDate || '';
-    document.getElementById('edit-invoice-number').value = order.invoiceNumber || '';
-    
-    // Populate run dropdown if delivery date exists
-    populateEditAssignRunDropdown();
-    
-    // Set current run if assigned
-    const assignRunSelect = document.getElementById('edit-assign-run');
-    if (assignRunSelect && order.runId) {
-        // Find the run and set it
-        const runs = getRuns();
-        const run = runs.find(r => r.id === order.runId);
-        if (run) {
-            assignRunSelect.value = order.runId;
-        }
-    } else if (assignRunSelect) {
-        assignRunSelect.value = '';
-    }
-    
-    // Show modal
-    document.getElementById('edit-order-modal').style.display = 'flex';
-}
-
-// Close edit order modal
-function closeEditOrderModal() {
-    document.getElementById('edit-order-modal').style.display = 'none';
-}
-
-// Get edit form bottle quantities
-function getEditFormBottleQuantities() {
-    const bottles = {};
-    BOTTLE_TYPES.forEach(type => {
-        const el = document.getElementById('edit-bottle-qty-' + type);
-        bottles[type] = el ? Math.max(0, parseInt(el.value, 10) || 0) : 0;
-    });
-    return bottles;
-}
-
-// Get edit form total bottle count
-function getEditFormTotalBottleCount() {
-    const b = getEditFormBottleQuantities();
-    return Object.values(b).reduce((sum, qty) => sum + qty, 0);
-}
-
-// Get edit form trailer bottle count (45kg only)
-function getEditFormTrailerBottleCount() {
-    const b = getEditFormBottleQuantities();
-    return b['45kg'] || 0;
-}
-
-// Update edit bottle total display
-function updateEditBottleTotalDisplay() {
-    const el = document.getElementById('edit-bottle-total-display');
-    if (!el) return;
-    const total = getEditFormTotalBottleCount();
-    el.textContent = 'Total: ' + total + ' bottle' + (total !== 1 ? 's' : '');
-}
-
-// Populate edit assign run dropdown
-function populateEditAssignRunDropdown() {
-    const dateInput = document.getElementById('edit-delivery-date');
-    const runSelect = document.getElementById('edit-assign-run');
-    if (!dateInput || !runSelect) return;
-    
-    const deliveryDate = dateInput.value;
-    const orderTrailerBottles = getEditFormTrailerBottleCount();
-    
-    runSelect.innerHTML = '<option value="">Auto</option>';
-    
-    if (!deliveryDate) {
-        const hint = document.getElementById('edit-assign-run-hint');
-        if (hint) hint.textContent = 'Select a date to see runs. Max 8 bottles per run (45kg only).';
-        return;
-    }
-    
-    const runs = getRuns().filter(r => r.deliveryDate === deliveryDate);
-    const currentOrderId = document.getElementById('edit-order-id').value;
-    
-    runs.forEach(run => {
-        const current = getRunTrailerBottleCount(run.id, currentOrderId);
-        const wouldBe = current + orderTrailerBottles;
-        const full = wouldBe > MAX_BOTTLES_PER_RUN;
-        const option = document.createElement('option');
-        option.value = run.id;
-        option.textContent = 'Run ' + run.runNumber + ' (' + current + '/8)' + (full ? ' — full' : '');
-        if (full) option.disabled = true;
-        runSelect.appendChild(option);
-    });
-    
-    const hint = document.getElementById('edit-assign-run-hint');
-    if (hint) hint.textContent = orderTrailerBottles > MAX_BOTTLES_PER_RUN ? 'Order exceeds 8 bottles (45kg only); cannot assign to a single run.' : 'Max 8 bottles per run (45kg only). Auto picks first run with space.';
-}
-
-// Validate edit form
-function validateEditForm() {
-    const name = document.getElementById('edit-customer-name').value.trim();
-    const mobile = document.getElementById('edit-customer-mobile').value.trim();
-    const address = document.getElementById('edit-customer-address').value.trim();
-    const totalBottles = getEditFormTotalBottleCount();
-    
-    if (!name) {
-        alert('Please enter customer name');
-        document.getElementById('edit-customer-name').focus();
-        return false;
-    }
-    
-    if (!mobile) {
-        alert('Please enter mobile number');
-        document.getElementById('edit-customer-mobile').focus();
-        return false;
-    }
-    
-    if (!address) {
-        alert('Please enter address');
-        document.getElementById('edit-customer-address').focus();
-        return false;
-    }
-    
-    if (totalBottles < 1) {
-        alert('Please add at least one bottle (set quantity for a bottle type)');
-        return false;
-    }
-    
-    // If a specific run is selected, check capacity (only 45kg bottles count)
-    const runSelect = document.getElementById('edit-assign-run');
-    const selectedRunId = runSelect && runSelect.value;
-    const currentOrderId = document.getElementById('edit-order-id').value;
-    if (selectedRunId) {
-        const currentTrailer = getRunTrailerBottleCount(selectedRunId, currentOrderId);
-        const orderTrailer = getEditFormTrailerBottleCount();
-        if (currentTrailer + orderTrailer > MAX_BOTTLES_PER_RUN) {
-            alert('This run is full (max ' + MAX_BOTTLES_PER_RUN + ' bottles, 45kg only). Choose another run or leave as Auto.');
-            return false;
-        }
-    }
-    
-    return true;
-}
-
-// Save edited order
-async function saveEditedOrder() {
-    if (!validateEditForm()) {
-        return;
-    }
-    
-    const orderId = document.getElementById('edit-order-id').value;
-    const orders = getOrders();
-    const order = orders.find(o => o.id === orderId);
-    if (!order) {
-        alert('Order not found');
-        return;
-    }
-    
-    const name = document.getElementById('edit-customer-name').value.trim();
-    const mobile = document.getElementById('edit-customer-mobile').value.trim();
-    const address = document.getElementById('edit-customer-address').value.trim();
-    const bottles = getEditFormBottleQuantities();
-    const totalBottleCount = getEditFormTotalBottleCount();
-    const preferredDay = document.querySelector('input[name="edit-preferred-day"]:checked').value;
-    const orderNotes = document.getElementById('edit-order-notes').value.trim();
-    let deliveryDate = document.getElementById('edit-delivery-date').value || null;
-    const invoiceNumber = document.getElementById('edit-invoice-number').value.trim() || null;
-    const assignRunSelect = document.getElementById('edit-assign-run');
-    const assignRunValue = assignRunSelect ? assignRunSelect.value : '';
-    
-    // Update customer
-    const customers = getCustomers();
-    let customer = customers.find(c => c.id === order.customerId);
-    if (customer) {
-        customer.name = name;
-        customer.mobile = mobile;
-        customer.address = address;
-        await saveCustomer(customer);
-    } else {
-        // Create new customer if not found
-        customer = await findOrCreateCustomer(name, mobile, address);
-        order.customerId = customer.id;
-    }
-    
-    // Resolve run assignment: specific run or Auto (only 45kg bottles count for capacity)
-    let runId = null;
-    const orderTrailerBottles = getEditFormTrailerBottleCount();
-    if (deliveryDate && assignRunValue) {
-        if (assignRunValue === 'auto' || assignRunValue === '') {
-            // Auto: first run with capacity (excluding current order)
-            const runs = getRuns().filter(r => r.deliveryDate === deliveryDate);
-            for (let i = 0; i < runs.length; i++) {
-                const currentTrailer = getRunTrailerBottleCount(runs[i].id, orderId);
-                if (currentTrailer + orderTrailerBottles <= MAX_BOTTLES_PER_RUN) {
-                    runId = runs[i].id;
-                    break;
-                }
-            }
-        } else {
-            runId = assignRunValue;
-            const currentTrailer = getRunTrailerBottleCount(runId, orderId);
-            if (currentTrailer + orderTrailerBottles > MAX_BOTTLES_PER_RUN) {
-                alert('This run is full (max ' + MAX_BOTTLES_PER_RUN + ' bottles, 45kg only). Save blocked.');
-                return;
-            }
-        }
-    }
-    
-    // Update order
-    order.bottles = bottles;
-    order.totalBottleCount = totalBottleCount;
-    order.preferredDay = preferredDay;
-    order.deliveryDate = deliveryDate;
-    order.invoiceNumber = invoiceNumber;
-    order.notes = orderNotes;
-    
-    // Handle run assignment change
-    const oldRunId = order.runId;
-    order.runId = runId;
-    order.status = runId ? 'Assigned' : 'Unassigned';
-    
-    // If run changed, update old and new runs
-    if (oldRunId !== runId) {
-        const runs = getRuns();
-        if (oldRunId) {
-            const oldRun = runs.find(r => r.id === oldRunId);
-            if (oldRun && oldRun.orderIds) {
-                oldRun.orderIds = oldRun.orderIds.filter(id => id !== orderId);
-                await saveRun(oldRun);
-            }
-        }
-        if (runId) {
-            const newRun = runs.find(r => r.id === runId);
-            if (newRun) {
-                if (!newRun.orderIds) newRun.orderIds = [];
-                if (!newRun.orderIds.includes(orderId)) {
-                    newRun.orderIds.push(orderId);
-                }
-                await saveRun(newRun);
-            }
-        }
-    }
-    
-    await saveOrder(order);
-    
-    // Update customer notes if order notes provided
-    if (orderNotes) {
-        await updateCustomerNotes(customer.id, orderNotes);
-    }
-    
-    // Close modal
-    closeEditOrderModal();
-    
-    // Refresh displays
-    const searchQuery = document.getElementById('undelivered-search')?.value || '';
-    renderUndeliveredOrders(searchQuery);
-    
-    // Refresh run builder if visible
-    const runDate = document.getElementById('run-date')?.value;
-    if (runDate) {
-        renderRunBuilder(runDate);
-    }
-    
-    alert('Order updated successfully!');
-}
-
-// Render customer history
-function renderCustomerHistory(searchQuery = '') {
-    const container = document.getElementById('customer-history-list');
-    if (!container) return;
-    
-    const customers = getCustomers();
-    const orders = getOrders();
-    const runs = getRuns();
-    
-    // Filter customers by search query
-    let filteredCustomers = customers;
-    if (searchQuery && searchQuery.trim()) {
-        const lowerQuery = searchQuery.toLowerCase().trim();
-        filteredCustomers = customers.filter(customer => {
-            const nameMatch = customer.name.toLowerCase().includes(lowerQuery);
-            const mobileMatch = customer.mobile.toLowerCase().includes(lowerQuery);
-            const addressMatch = customer.address.toLowerCase().includes(lowerQuery);
-            return nameMatch || mobileMatch || addressMatch;
-        });
-    }
-    
-    if (filteredCustomers.length === 0) {
-        container.innerHTML = '<p class="no-orders-message">No customers found.</p>';
-        return;
-    }
-    
-    // Sort customers by name
-    filteredCustomers.sort((a, b) => a.name.localeCompare(b.name));
-    
-    let html = '<div class="customer-list-simple">';
-    
-    filteredCustomers.forEach(customer => {
-        // Get all orders for this customer
-        const customerOrders = orders.filter(o => o.customerId === customer.id);
-        
-        // Sort orders by creation date (newest first)
-        customerOrders.sort((a, b) => {
-            const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
-            const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
-            return dateB - dateA;
-        });
-        
-        // Calculate totals
-        const totalOrders = customerOrders.length;
-        const deliveredOrders = customerOrders.filter(o => o.delivered).length;
-        const totalBottles = customerOrders.reduce((sum, o) => sum + getOrderTotalBottles(o), 0);
-        
-        html += `
-            <div class="customer-list-item">
-                <div class="customer-name-header" onclick="toggleCustomerOrders('${customer.id}')">
-                    <span class="customer-name">${escapeHtml(customer.name)}</span>
-                    <span class="customer-order-count">${totalOrders} order${totalOrders !== 1 ? 's' : ''} • ${totalBottles} bottle${totalBottles !== 1 ? 's' : ''}</span>
-                    <span class="toggle-icon" id="toggle-${customer.id}">▸</span>
-                </div>
-                <div class="customer-orders-details" id="orders-${customer.id}" style="display: none;">
-                    <div class="customer-details-expanded">
-                        <div class="customer-contact-expanded">
-                            <div><strong>Mobile:</strong> ${escapeHtml(customer.mobile)}</div>
-                            <div><strong>Address:</strong> ${escapeHtml(customer.address)}</div>
-                        </div>
-                        ${customer.notes ? `<div class="customer-notes"><strong>Customer Notes:</strong> ${escapeHtml(customer.notes)}</div>` : ''}
-                        <div class="customer-summary-expanded">
-                            <span>Total Orders: <strong>${totalOrders}</strong></span>
-                            <span>Delivered: <strong>${deliveredOrders}</strong></span>
-                            <span>Total Bottles: <strong>${totalBottles}</strong></span>
-                        </div>
-                    </div>
-                    <div class="customer-orders-section">
-                        <table class="customer-orders-table">
-                            <thead>
-                                <tr>
-                                    <th>Order Date</th>
-                                    <th>Delivery Date</th>
-                                    <th>Bottles</th>
-                                    <th>Bottle Types</th>
-                                    <th>Preferred Day</th>
-                                    <th>Status</th>
-                                    <th>Delivered</th>
-                                    <th>Delivered Date</th>
-                                    <th>Run</th>
-                                    <th>Invoice #</th>
-                                    <th>Notes</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-        `;
-        
-        customerOrders.forEach(order => {
-            let orderDate = 'N/A';
-            if (order.createdAt) {
-                const dateStr = order.createdAt.split('T')[0];
-                orderDate = formatDate(dateStr);
-            }
-            const deliveryDate = order.deliveryDate ? formatDate(order.deliveryDate) : '—';
-            const deliveredDate = order.deliveredAt ? new Date(order.deliveredAt).toLocaleString('en-AU') : '—';
-            const run = order.runId ? runs.find(r => r.id === order.runId) : null;
-            const runInfo = run ? `Run ${run.runNumber} (${formatDate(run.deliveryDate)})` : '—';
-            const status = order.delivered ? 'Delivered' : (order.runId ? 'Assigned' : 'Unassigned');
-            
-            html += `
-                <tr class="${order.delivered ? 'delivered-order' : ''}">
-                    <td>${orderDate}</td>
-                    <td>${deliveryDate}</td>
-                    <td>${getOrderTotalBottles(order)}</td>
-                    <td>${escapeHtml(formatBottleTypesOnly(order))}</td>
-                    <td>${escapeHtml(order.preferredDay || 'Any')}</td>
-                    <td><span class="status-badge status-${status.toLowerCase()}">${status}</span></td>
-                    <td>${order.delivered ? '<span class="delivered-badge">✓ Yes</span>' : '<span class="not-delivered-badge">No</span>'}</td>
-                    <td>${deliveredDate}</td>
-                    <td>${runInfo}</td>
-                    <td>${escapeHtml(order.invoiceNumber || '—')}</td>
-                    <td class="notes-cell">${escapeHtml(order.notes || '—')}</td>
-                </tr>
-            `;
-        });
-        
-        html += `
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        `;
-    });
-    
-    html += '</div>';
-    container.innerHTML = html;
-}
-
-// Toggle customer orders visibility
-function toggleCustomerOrders(customerId) {
-    const ordersDiv = document.getElementById('orders-' + customerId);
-    const toggleIcon = document.getElementById('toggle-' + customerId);
-    
-    if (ordersDiv.style.display === 'none') {
-        ordersDiv.style.display = 'block';
-        toggleIcon.textContent = '▾';
-    } else {
-        ordersDiv.style.display = 'none';
-        toggleIcon.textContent = '▸';
-    }
-}
-
-// Assign delivery date to an order
-async function assignDeliveryDateToOrder(orderId, deliveryDate) {
-    const orders = getOrders();
-    const order = orders.find(o => o.id === orderId);
-    
-    if (!order) {
-        alert('Order not found');
-        return;
-    }
-    
-    const oldDeliveryDate = order.deliveryDate;
-    const oldRunId = order.runId;
-    
-    // Update order
-    if (deliveryDate) {
-        order.deliveryDate = deliveryDate;
-        
-        // If delivery date changed and order was assigned to a run on the old date, unassign it
-        if (oldDeliveryDate && oldDeliveryDate !== deliveryDate && oldRunId) {
-            const runs = getRuns();
-            const oldRun = runs.find(r => r.id === oldRunId);
-            
-            // Only unassign if the old run was for the old date
-            if (oldRun && oldRun.deliveryDate === oldDeliveryDate) {
-                order.runId = null;
-                order.status = 'Unassigned';
-                
-                // Remove order from old run's orderIds if it exists
-                if (oldRun.orderIds && oldRun.orderIds.includes(orderId)) {
-                    oldRun.orderIds = oldRun.orderIds.filter(id => id !== orderId);
-                    await saveRun(oldRun);
-                }
-            }
-        }
-    } else {
-        // If date is cleared, remove it and unassign from run
-        order.deliveryDate = null;
-        if (order.runId) {
-            const runs = getRuns();
-            const run = runs.find(r => r.id === order.runId);
-            if (run && run.orderIds && run.orderIds.includes(orderId)) {
-                run.orderIds = run.orderIds.filter(id => id !== orderId);
-                await saveRun(run);
-            }
-            order.runId = null;
-            order.status = 'Unassigned';
-        }
-    }
-    
-    await saveOrder(order);
-    
-    // Refresh the display
-    const searchQuery = document.getElementById('undelivered-search')?.value || '';
-    renderUndeliveredOrders(searchQuery);
-    
-    // Refresh run builder if visible and if date changed
-    const runDate = document.getElementById('run-date')?.value;
-    if (runDate) {
-        // Refresh both old and new dates if they're different
-        if (oldDeliveryDate && oldDeliveryDate !== deliveryDate) {
-            renderRunBuilder(oldDeliveryDate);
-        }
-        if (deliveryDate && deliveryDate === runDate) {
-            renderRunBuilder(deliveryDate);
-        }
-    }
-    
-    // Show confirmation
-    showMessage(`Delivery date ${deliveryDate ? 'assigned' : 'removed'} for order${oldRunId && oldDeliveryDate !== deliveryDate ? '. Order unassigned from previous run.' : ''}`, 'success');
 }
 
 // Initialize app when DOM is loaded
