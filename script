@@ -434,7 +434,7 @@
         </div>
     </div>
 
-        <script type="module">
+    <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
         import { getAuth } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
         import { getFirestore } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
@@ -452,12 +452,15 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
+        // expose globally for app.js
         window.firebaseApp = app;
         window.firebaseAuth = auth;
         window.firebaseDB = db;
     </script>
 
+    </div>
+    </div>
+
     <script src="app.js"></script>
 </body>
 </html>
-
