@@ -902,6 +902,31 @@ select#assign-run:focus {
     font-size: var(--font-size-xs);
 }
 
+.btn-delete-order {
+    background: var(--status-danger);
+    color: white;
+    border: none;
+    border-radius: var(--border-radius-sm);
+    padding: var(--space-xs) var(--space-sm);
+    cursor: pointer;
+    font-size: var(--font-size-base);
+    transition: all var(--transition-base);
+    min-width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-delete-order:hover {
+    background: #b91c1c;
+    transform: scale(1.1);
+}
+
+.btn-delete-order:active {
+    transform: scale(0.95);
+}
+
 .assign-delivery-date {
     padding: var(--space-sm);
     border: 2px solid var(--brand-600);

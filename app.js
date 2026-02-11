@@ -1121,12 +1121,13 @@ function renderRunBuilder(date) {
     runs.forEach(run => {
         const runOrders = orders.filter(o => o.runId === run.id);
         const totalBottles = runOrders.reduce((sum, o) => sum + getOrderTotalBottles(o), 0);
+        const trailerBottles = runOrders.reduce((sum, o) => sum + getOrderTrailerBottles(o), 0); // Only 45kg count toward limit
         const activeManifest = getActiveManifestForRun(run.id);
         
         html += `
             <div class="run-card">
                 <div class="run-header">
-                    <h4>Run ${run.runNumber} (${totalBottles} / 8 bottles)</h4>
+                    <h4>Run ${run.runNumber} (${trailerBottles} / 8 bottles - 45kg only, Total: ${totalBottles})</h4>
                     ${activeManifest ? '<span class="manifest-locked">Manifest Generated</span>' : ''}
                 </div>
                 <div class="run-orders">
@@ -1161,7 +1162,7 @@ function renderRunBuilder(date) {
     // Create new run button
     const allAssignedBottles = runs.reduce((sum, run) => {
         const runOrders = orders.filter(o => o.runId === run.id);
-        return sum + runOrders.reduce((s, o) => s + o.quantity, 0);
+        return sum + runOrders.reduce((s, o) => s + getOrderTotalBottles(o), 0);
     }, 0);
     
     html += '</div>';
@@ -1227,8 +1228,9 @@ function renderUnassignedOrders(orders, date) {
                             <option value="">Assign to run...</option>
                             ${availableRuns.map(run => {
                                 const runOrders = getOrdersByDate(date).filter(o => o.runId === run.id);
+                                const trailerBottles = runOrders.reduce((sum, o) => sum + getOrderTrailerBottles(o), 0);
                                 const totalBottles = runOrders.reduce((sum, o) => sum + getOrderTotalBottles(o), 0);
-                                return `<option value="${run.id}">Run ${run.runNumber} (${totalBottles}/8)</option>`;
+                                return `<option value="${run.id}">Run ${run.runNumber} (${trailerBottles}/8 - 45kg only, Total: ${totalBottles})</option>`;
                             }).join('')}
                         </select>
                     ` : '<span class="no-runs">Create a run first</span>'}
@@ -2531,6 +2533,7 @@ window.assignDeliveryDateToOrder = assignDeliveryDateToOrder;
 window.openEditOrderModal = openEditOrderModal;
 window.closeEditOrderModal = closeEditOrderModal;
 window.saveEditedOrder = saveEditedOrder;
+window.deleteOrder = deleteOrder;
 window.toggleCustomerOrders = toggleCustomerOrders;
 window.toggleGeneratedRun = toggleGeneratedRun;
 window.toggleMonthRuns = toggleMonthRuns;
@@ -2666,8 +2669,11 @@ function renderUndeliveredSummary() {
     const breakdown = {
         '45kg': orders.reduce((s, o) => s + getOrderBottles(o)['45kg'], 0),
         '8.5kg': orders.reduce((s, o) => s + getOrderBottles(o)['8.5kg'], 0),
-        'Forklift': orders.reduce((s, o) => s + getOrderBottles(o)['Forklift'], 0)
+        'Forklift 18kg': orders.reduce((s, o) => s + getOrderBottles(o)['Forklift 18kg'], 0),
+        'Forklift 15kg': orders.reduce((s, o) => s + getOrderBottles(o)['Forklift 15kg'], 0)
     };
+    
+    const forkliftTotal = breakdown['Forklift 18kg'] + breakdown['Forklift 15kg'];
     
     container.innerHTML = `
         <div class="summary-strip-grid">
@@ -2688,8 +2694,8 @@ function renderUndeliveredSummary() {
                 <div class="summary-value">${breakdown['8.5kg']}</div>
             </div>
             <div class="summary-card">
-                <div class="summary-label">Forklift</div>
-                <div class="summary-value">${breakdown['Forklift']}</div>
+                <div class="summary-label">Forklift 15kg / 18kg</div>
+                <div class="summary-value">${breakdown['Forklift 15kg']} / ${breakdown['Forklift 18kg']}</div>
             </div>
         </div>
     `;
@@ -2736,6 +2742,7 @@ function renderUndeliveredOrders(searchQuery = '') {
                         <th>Assign Delivery Date</th>
                         <th>Notes</th>
                         <th>Invoice #</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -2771,6 +2778,16 @@ function renderUndeliveredOrders(searchQuery = '') {
                 </td>
                 <td class="notes-cell">${escapeHtml(notes)}</td>
                 <td>${escapeHtml(invoiceNumber)}</td>
+                <td>
+                    <button 
+                        type="button" 
+                        class="btn-delete-order" 
+                        onclick="event.stopPropagation(); deleteOrder('${order.id}');"
+                        title="Remove Order"
+                    >
+                        🗑️
+                    </button>
+                </td>
             </tr>
         `;
     });
@@ -2785,6 +2802,61 @@ function renderUndeliveredOrders(searchQuery = '') {
     `;
     
     container.innerHTML = html;
+}
+
+// Delete an order
+async function deleteOrder(orderId) {
+    const orders = getOrders();
+    const order = orders.find(o => o.id === orderId);
+    
+    if (!order) {
+        alert('Order not found');
+        return;
+    }
+    
+    const customer = getCustomerById(order.customerId);
+    const customerName = customer ? customer.name : 'Unknown';
+    
+    // Confirm deletion
+    if (!confirm(`Are you sure you want to remove this order for ${customerName}?\n\nThis will permanently delete the order. This action cannot be undone.`)) {
+        return;
+    }
+    
+    try {
+        // If order is assigned to a run, remove it from the run
+        if (order.runId) {
+            const runs = getRuns();
+            const run = runs.find(r => r.id === order.runId);
+            if (run && run.orderIds) {
+                run.orderIds = run.orderIds.filter(id => id !== orderId);
+                await saveRun(run);
+            }
+        }
+        
+        // Delete the order from Firestore
+        await deleteDocument('orders', orderId);
+        
+        // Show success message
+        showMessage('Order removed successfully', 'success');
+        
+        // Refresh the display (real-time listener will handle this, but refresh immediately for better UX)
+        const searchQuery = document.getElementById('undelivered-search')?.value || '';
+        renderUndeliveredOrders(searchQuery);
+        
+        // Refresh run builder if visible
+        const runDate = document.getElementById('run-date')?.value;
+        if (runDate) {
+            renderRunBuilder(runDate);
+        }
+        
+        // Refresh stock count
+        if (typeof renderStockCount === 'function') {
+            renderStockCount();
+        }
+    } catch (error) {
+        console.error('Error deleting order:', error);
+        alert('Error removing order: ' + error.message);
+    }
 }
 
 // Open edit order modal
