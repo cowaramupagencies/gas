@@ -62,31 +62,14 @@
             </div>
         </header>
 
-        <!-- Main Menu (shown after login) -->
-        <div id="main-menu" class="main-menu">
-            <h2 class="main-menu-title">Main</h2>
-            <div class="main-menu-actions">
-                <button type="button" class="main-menu-btn" id="enter-gas-bottle-btn">ENTER GAS BOTTLE</button>
-                <button type="button" class="main-menu-btn" id="check-manifest-btn">CHECK / CREATE MANIFEST</button>
-                <button type="button" class="main-menu-btn" id="search-customer-btn">SEARCH CUSTOMER</button>
-            </div>
-        </div>
-
-        <!-- App Workspace (hidden until a main menu option is selected) -->
-        <div id="app-workspace" class="app-workspace" style="display: none;">
-        <div class="workspace-nav">
-            <button type="button" class="back-to-menu-btn" id="back-to-menu-btn">← Back to Main</button>
-        </div>
-
         <!-- Main View Toggle -->
-        <div class="main-view-toggle" style="display: none;">
+        <div class="main-view-toggle">
             <button type="button" class="view-toggle-btn active" id="customer-view-btn">CUSTOMER</button>
             <button type="button" class="view-toggle-btn" id="staff-view-btn">STAFF / ADMIN</button>
         </div>
 
         <!-- CUSTOMER VIEW (Order Entry) -->
-        <div class="view-section" id="customer-view" style="display: none;">
-            <h2 class="view-heading">Enter Gas Bottle</h2>
+        <div class="view-section" id="customer-view">
             <!-- Customer Search Section -->
         <section class="search-section">
             <label for="customer-search">Search Customer</label>
@@ -224,8 +207,8 @@
                     <div class="staff-tabs">
                         <button class="staff-tab" data-tab="stock-count">Stock Count</button>
                         <button class="staff-tab active" data-tab="undelivered">Undelivered Orders</button>
-                        <button class="staff-tab" data-tab="run-builder">Manifest Builder</button>
-                        <button class="staff-tab" data-tab="generated-runs">Old Manifests</button>
+                        <button class="staff-tab" data-tab="run-builder">Run Builder</button>
+                        <button class="staff-tab" data-tab="generated-runs">Generated Runs</button>
                         <button class="staff-tab" data-tab="daily-view">Daily/Weekly View</button>
                         <button class="staff-tab" data-tab="customer-history">Customer History</button>
                     </div>
@@ -380,8 +363,7 @@
 
                 <!-- Generated Runs Tab -->
                 <div class="staff-tab-content" id="tab-generated-runs">
-                    <h3>Old Manifests</h3>
-                    <p class="section-description">View past manifests. Open a run to return undelivered bottles back to the undelivered queue.</p>
+                    <h3>Generated Runs / Delivery History</h3>
                     <div id="generated-runs-list" class="generated-runs-list"></div>
                     <div id="run-detail-view" class="run-detail-view" style="display: none;"></div>
                 </div>
@@ -414,20 +396,10 @@
 
                 <!-- Run Builder Tab -->
                 <div class="staff-tab-content" id="tab-run-builder">
-                    <h3>Manifest Builder</h3>
-                    <p class="section-description">Select undelivered bottles, then generate your manifest for the delivery date.</p>
+                    <h3>Run Builder</h3>
                     <div class="form-group">
                         <label for="run-date">Delivery Date</label>
                         <input type="date" id="run-date">
-                    </div>
-                    <div class="form-group">
-                        <label for="manifest-builder-search">Search Orders</label>
-                        <input
-                            type="text"
-                            id="manifest-builder-search"
-                            placeholder="Search by customer name, mobile, or address..."
-                            autocomplete="off"
-                        >
                     </div>
                     <div id="run-builder-content"></div>
                 </div>
@@ -459,7 +431,6 @@
 
                 </div>
             </section>
-        </div>
         </div>
     </div>
 

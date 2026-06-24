@@ -132,10 +132,6 @@ let ordersState = [];
 let runsState = [];
 let manifestsState = [];
 
-// Manifest builder UI state
-let manifestBuilderSelection = new Set();
-let lastGeneratedManifestId = null;
-
 // Load customers from Firestore
 async function loadCustomers() {
     if (!db) return [];
@@ -1106,227 +1102,96 @@ function renderDailyView(date) {
     container.innerHTML = html;
 }
 
-// Render manifest builder (select undelivered orders → generate manifest)
+// Render run builder
 function renderRunBuilder(date) {
     const container = document.getElementById('run-builder-content');
-    if (!container) return;
-
-    const searchQuery = document.getElementById('manifest-builder-search')?.value || '';
-    let orders = getUndeliveredOrders().filter(o => !o.runId);
-
-    if (searchQuery) {
-        orders = filterUndeliveredOrders(orders, searchQuery);
-    }
-
-    if (orders.length === 0) {
-        container.innerHTML = '<p class="no-orders-message">No unassigned undelivered orders. All bottles are either delivered or already on a manifest.</p>';
+    
+    if (!date) {
+        container.innerHTML = '<p>Please select a delivery date.</p>';
         return;
     }
-
-    let html = `
-        <div class="undelivered-table-wrapper">
-            <table class="undelivered-table manifest-builder-table">
-                <thead>
-                    <tr>
-                        <th>Select</th>
-                        <th>Customer Name</th>
-                        <th>Mobile</th>
-                        <th>Address</th>
-                        <th>Bottle Type</th>
-                        <th>Qty</th>
-                        <th>Preferred Day</th>
-                        <th>Delivery Date</th>
-                        <th>Notes</th>
-                        <th>Invoice #</th>
-                    </tr>
-                </thead>
-                <tbody>
-    `;
-
-    orders.forEach(order => {
-        const customer = getCustomerById(order.customerId);
-        if (!customer) return;
-
-        const isSelected = manifestBuilderSelection.has(order.id);
-        const preferredDay = order.preferredDay || 'Any';
-        const deliveryDate = order.deliveryDate || '';
-        const notes = order.notes || '';
-        const invoiceNumber = order.invoiceNumber || '';
-
+    
+    const orders = getOrdersByDate(date);
+    const unassignedOrders = orders.filter(o => !o.runId);
+    const runs = getRuns().filter(r => r.deliveryDate === date);
+    
+    let html = '<div class="runs-container">';
+    
+    // Existing runs
+    runs.forEach(run => {
+        const runOrders = orders.filter(o => o.runId === run.id);
+        const totalBottles = runOrders.reduce((sum, o) => sum + getOrderTotalBottles(o), 0);
+        const activeManifest = getActiveManifestForRun(run.id);
+        
         html += `
-            <tr data-order-id="${order.id}" class="manifest-order-row ${isSelected ? 'manifest-row-selected' : ''}" onclick="toggleManifestSelection('${order.id}', event)">
-                <td onclick="event.stopPropagation();">
-                    <input
-                        type="checkbox"
-                        class="manifest-select-checkbox"
-                        data-order-id="${order.id}"
-                        ${isSelected ? 'checked' : ''}
-                        onchange="toggleManifestSelection('${order.id}', event)"
-                    >
-                </td>
-                <td>${escapeHtml(customer.name)}</td>
-                <td>${escapeHtml(customer.mobile)}</td>
-                <td>${escapeHtml(customer.address)}</td>
-                <td>${escapeHtml(formatBottleBreakdown(order))}</td>
-                <td>${getOrderTotalBottles(order)}</td>
-                <td>${escapeHtml(preferredDay)}</td>
-                <td>
-                    <input
-                        type="date"
-                        class="assign-delivery-date"
-                        data-order-id="${order.id}"
-                        value="${deliveryDate}"
-                        onclick="event.stopPropagation();"
-                        onchange="assignDeliveryDateToOrder('${order.id}', this.value); event.stopPropagation();"
-                    >
-                </td>
-                <td class="notes-cell">${escapeHtml(notes)}</td>
-                <td>${escapeHtml(invoiceNumber)}</td>
-            </tr>
+            <div class="run-card">
+                <div class="run-header">
+                    <h4>Run ${run.runNumber} (${totalBottles} / 8 bottles)</h4>
+                    ${activeManifest ? '<span class="manifest-locked">Manifest Generated</span>' : ''}
+                </div>
+                <div class="run-orders">
+        `;
+        
+        runOrders.forEach(order => {
+            const customer = getCustomerById(order.customerId);
+            html += `
+                <div class="run-order-item">
+                    ${escapeHtml(customer ? customer.name : 'Unknown')} - 
+                    ${escapeHtml(formatBottleBreakdown(order))} (${getOrderTotalBottles(order)})
+                </div>
+            `;
+        });
+        
+        html += `
+                </div>
+                <div class="run-actions">
+                    ${!activeManifest ? `<button onclick="removeRun('${run.id}')">Remove Run</button>` : ''}
+                    ${activeManifest ? `
+                        <button onclick="generateManifest('${run.id}')">Regenerate Manifest</button>
+                        <button onclick="downloadManifestPDF(getManifestById('${activeManifest.id}'))">Download Manifest</button>
+                        <p class="field-hint" style="margin-top: 8px; font-size: 12px;">Regenerating will replace the existing manifest with an updated version.</p>
+                    ` : `
+                        <button onclick="generateManifest('${run.id}')">Generate Manifest</button>
+                    `}
+                </div>
+            </div>
         `;
     });
-
-    const selectedCount = manifestBuilderSelection.size;
-    const canDownload = !!lastGeneratedManifestId && !!getManifestById(lastGeneratedManifestId);
-
+    
+    // Create new run button
+    const allAssignedBottles = runs.reduce((sum, run) => {
+        const runOrders = orders.filter(o => o.runId === run.id);
+        return sum + runOrders.reduce((s, o) => s + o.quantity, 0);
+    }, 0);
+    
+    html += '</div>';
+    
     html += `
-                </tbody>
-            </table>
-        </div>
-        <div class="manifest-builder-footer">
-            <span class="manifest-selection-count" id="manifest-selection-count">${selectedCount} bottle${selectedCount !== 1 ? 's' : ''} selected</span>
-            <button type="button" class="manifest-footer-btn generate" onclick="generateManifestFromSelection()" ${selectedCount === 0 ? 'disabled' : ''}>Generate Manifest</button>
-            <button type="button" class="manifest-footer-btn download" onclick="downloadLastManifest()" ${canDownload ? '' : 'disabled'}>Download Manifest</button>
+        <div class="create-run-section">
+            <button id="create-new-run" class="create-run-btn">Create New Run</button>
+            <div class="run-counter">Total bottles assigned: ${allAssignedBottles} / ${orders.reduce((s, o) => s + getOrderTotalBottles(o), 0)}</div>
         </div>
     `;
-
+    
+    html += `
+        <div class="unassigned-orders">
+            <h4>Unassigned Orders</h4>
+            <div id="unassigned-orders-list"></div>
+        </div>
+    `;
+    
     container.innerHTML = html;
+    
+    // Render unassigned orders
+    renderUnassignedOrders(unassignedOrders, date);
+    
+    // Create new run handler
+    document.getElementById('create-new-run')?.addEventListener('click', () => {
+        createNewRun(date);
+    });
 }
 
-function toggleManifestSelection(orderId, event) {
-    if (event?.target?.classList?.contains('assign-delivery-date')) return;
-    if (event?.target?.type === 'checkbox' && event?.type === 'click') return;
-
-    const isCheckbox = event?.target?.type === 'checkbox';
-    let shouldSelect;
-
-    if (isCheckbox) {
-        shouldSelect = event.target.checked;
-    } else {
-        shouldSelect = !manifestBuilderSelection.has(orderId);
-    }
-
-    if (shouldSelect) {
-        manifestBuilderSelection.add(orderId);
-    } else {
-        manifestBuilderSelection.delete(orderId);
-    }
-
-    const checkbox = document.querySelector(`.manifest-select-checkbox[data-order-id="${orderId}"]`);
-    if (checkbox) checkbox.checked = shouldSelect;
-
-    const row = document.querySelector(`tr[data-order-id="${orderId}"]`);
-    if (row) row.classList.toggle('manifest-row-selected', shouldSelect);
-
-    updateManifestBuilderFooter();
-}
-
-function updateManifestBuilderFooter() {
-    const countEl = document.getElementById('manifest-selection-count');
-    const generateBtn = document.querySelector('.manifest-footer-btn.generate');
-    const downloadBtn = document.querySelector('.manifest-footer-btn.download');
-    const count = manifestBuilderSelection.size;
-
-    if (countEl) {
-        countEl.textContent = `${count} bottle${count !== 1 ? 's' : ''} selected`;
-    }
-    if (generateBtn) {
-        generateBtn.disabled = count === 0;
-    }
-    if (downloadBtn) {
-        downloadBtn.disabled = !(lastGeneratedManifestId && getManifestById(lastGeneratedManifestId));
-    }
-}
-
-async function generateManifestFromSelection() {
-    const date = document.getElementById('run-date')?.value;
-    if (!date) {
-        alert('Please select a delivery date first.');
-        return;
-    }
-
-    const selectedIds = Array.from(manifestBuilderSelection);
-    if (selectedIds.length === 0) {
-        alert('Please select at least one bottle.');
-        return;
-    }
-
-    const orders = getOrders();
-    const selectedOrders = selectedIds.map(id => orders.find(o => o.id === id)).filter(Boolean);
-
-    const trailerTotal = selectedOrders.reduce((sum, o) => sum + getOrderTrailerBottles(o), 0);
-    if (trailerTotal > 8) {
-        alert(`Too many 45kg bottles selected (${trailerTotal}). Maximum 8 per run.`);
-        return;
-    }
-
-    const runs = getRuns().filter(r => r.deliveryDate === date);
-    const runNumber = runs.length + 1;
-
-    const run = {
-        id: generateId(),
-        deliveryDate: date,
-        runNumber: runNumber,
-        orderIds: selectedIds,
-        manifestId: null,
-        status: 'Pending',
-        completedAt: null,
-        previousRunId: null,
-        createdAt: new Date().toISOString()
-    };
-
-    await saveRun(run);
-
-    for (const orderId of selectedIds) {
-        const order = orders.find(o => o.id === orderId);
-        if (!order) continue;
-        order.runId = run.id;
-        order.deliveryDate = date;
-        order.status = 'Assigned';
-        await saveOrder(order);
-    }
-
-    manifestBuilderSelection.clear();
-
-    const manifest = await generateManifest(run.id);
-    if (manifest) {
-        lastGeneratedManifestId = manifest.id;
-    }
-
-    renderRunBuilder(date);
-
-    const searchQuery = document.getElementById('undelivered-search')?.value || '';
-    renderUndeliveredOrders(searchQuery);
-
-    showMessage(`Manifest generated for Run ${runNumber} with ${selectedIds.length} stop${selectedIds.length !== 1 ? 's' : ''}`, 'success');
-}
-
-function downloadLastManifest() {
-    if (!lastGeneratedManifestId) {
-        alert('No manifest to download. Generate a manifest first.');
-        return;
-    }
-    const manifest = getManifestById(lastGeneratedManifestId);
-    if (!manifest) {
-        alert('Manifest not found. Please generate a new manifest.');
-        lastGeneratedManifestId = null;
-        updateManifestBuilderFooter();
-        return;
-    }
-    downloadManifestPDF(manifest);
-}
-
-// Legacy: render unassigned orders (kept for compatibility)
+// Render unassigned orders
 function renderUnassignedOrders(orders, date) {
     const container = document.getElementById('unassigned-orders-list');
     if (!container) return;
@@ -1362,9 +1227,8 @@ function renderUnassignedOrders(orders, date) {
                             <option value="">Assign to run...</option>
                             ${availableRuns.map(run => {
                                 const runOrders = getOrdersByDate(date).filter(o => o.runId === run.id);
-                                const trailerBottles = runOrders.reduce((sum, o) => sum + getOrderTrailerBottles(o), 0);
                                 const totalBottles = runOrders.reduce((sum, o) => sum + getOrderTotalBottles(o), 0);
-                                return `<option value="${run.id}">Run ${run.runNumber} (${trailerBottles}/8 - 45kg only, Total: ${totalBottles})</option>`;
+                                return `<option value="${run.id}">Run ${run.runNumber} (${totalBottles}/8)</option>`;
                             }).join('')}
                         </select>
                     ` : '<span class="no-runs">Create a run first</span>'}
@@ -1568,8 +1432,6 @@ async function generateManifest(runId) {
     if (detailView && detailView.style.display !== 'none') {
         viewRunDetail(runId);
     }
-
-    return manifest;
 }
 
 // Download manifest PDF
@@ -2499,10 +2361,9 @@ function viewRunDetail(runId) {
                     )}
                 </td>
                 <td>
-                    ${!isCompleted && !delivered ? `
-                        <button class="btn-remove-from-manifest" onclick="removeOrderFromManifest('${order.id}', '${runId}')">Return to Undelivered</button>
-                        <button class="reschedule-btn" onclick="rescheduleOrder('${order.id}', '${runId}')">Reschedule</button>
-                    ` : ''}
+                    ${!isCompleted && !delivered ? (
+                        `<button class="reschedule-btn" onclick="rescheduleOrder('${order.id}', '${runId}')">Reschedule</button>`
+                    ) : ''}
                 </td>
             </tr>
         `;
@@ -2659,80 +2520,17 @@ function rescheduleOrder(orderId, runId) {
     showMessage('Order rescheduled and returned to undelivered queue', 'success');
 }
 
-// Remove order from manifest and return to undelivered queue
-async function removeOrderFromManifest(orderId, runId) {
-    if (!confirm('Remove this bottle from the manifest and return it to undelivered?')) {
-        return;
-    }
-
-    const orders = getOrders();
-    const order = orders.find(o => o.id === orderId);
-    if (!order) return;
-
-    const runs = getRuns();
-    const run = runs.find(r => r.id === runId);
-    if (!run || run.status === 'Completed') {
-        alert('Cannot modify a completed run.');
-        return;
-    }
-
-    order.runId = null;
-    order.status = 'Unassigned';
-    order.delivered = false;
-    order.deliveredAt = null;
-    order.deliveredRunId = null;
-
-    await saveOrder(order);
-    updateRunStatus(runId);
-
-    const remainingOrders = getOrders().filter(o => o.runId === runId);
-    const activeManifest = getActiveManifestForRun(runId);
-
-    if (remainingOrders.length === 0) {
-        if (activeManifest) {
-            activeManifest.status = 'SUPERSEDED';
-            activeManifest.supersededAt = new Date().toISOString();
-            await saveManifest(activeManifest);
-        }
-        await deleteDocument('runs', runId);
-        renderGeneratedRuns();
-    } else if (activeManifest) {
-        const updatedManifest = await generateManifest(runId);
-        if (updatedManifest) {
-            lastGeneratedManifestId = updatedManifest.id;
-        }
-        viewRunDetail(runId);
-    } else {
-        viewRunDetail(runId);
-    }
-
-    const searchQuery = document.getElementById('undelivered-search')?.value || '';
-    renderUndeliveredOrders(searchQuery);
-
-    const runDate = document.getElementById('run-date')?.value;
-    if (runDate) {
-        renderRunBuilder(runDate);
-    }
-
-    showMessage('Order returned to undelivered queue', 'success');
-}
-
 // Make functions globally available (for onclick handlers in HTML)
 window.viewRunDetail = viewRunDetail;
 window.toggleDelivery = toggleDelivery;
 window.markRunComplete = markRunComplete;
 window.rescheduleOrder = rescheduleOrder;
-window.removeOrderFromManifest = removeOrderFromManifest;
-window.toggleManifestSelection = toggleManifestSelection;
-window.generateManifestFromSelection = generateManifestFromSelection;
-window.downloadLastManifest = downloadLastManifest;
 window.getManifestById = getManifestById;
 window.generateManifest = generateManifest;
 window.assignDeliveryDateToOrder = assignDeliveryDateToOrder;
 window.openEditOrderModal = openEditOrderModal;
 window.closeEditOrderModal = closeEditOrderModal;
 window.saveEditedOrder = saveEditedOrder;
-window.deleteOrder = deleteOrder;
 window.toggleCustomerOrders = toggleCustomerOrders;
 window.toggleGeneratedRun = toggleGeneratedRun;
 window.toggleMonthRuns = toggleMonthRuns;
@@ -2868,11 +2666,8 @@ function renderUndeliveredSummary() {
     const breakdown = {
         '45kg': orders.reduce((s, o) => s + getOrderBottles(o)['45kg'], 0),
         '8.5kg': orders.reduce((s, o) => s + getOrderBottles(o)['8.5kg'], 0),
-        'Forklift 18kg': orders.reduce((s, o) => s + getOrderBottles(o)['Forklift 18kg'], 0),
-        'Forklift 15kg': orders.reduce((s, o) => s + getOrderBottles(o)['Forklift 15kg'], 0)
+        'Forklift': orders.reduce((s, o) => s + getOrderBottles(o)['Forklift'], 0)
     };
-    
-    const forkliftTotal = breakdown['Forklift 18kg'] + breakdown['Forklift 15kg'];
     
     container.innerHTML = `
         <div class="summary-strip-grid">
@@ -2893,8 +2688,8 @@ function renderUndeliveredSummary() {
                 <div class="summary-value">${breakdown['8.5kg']}</div>
             </div>
             <div class="summary-card">
-                <div class="summary-label">Forklift 15kg / 18kg</div>
-                <div class="summary-value">${breakdown['Forklift 15kg']} / ${breakdown['Forklift 18kg']}</div>
+                <div class="summary-label">Forklift</div>
+                <div class="summary-value">${breakdown['Forklift']}</div>
             </div>
         </div>
     `;
@@ -2937,10 +2732,10 @@ function renderUndeliveredOrders(searchQuery = '') {
                         <th>Bottle Type</th>
                         <th>Quantity</th>
                         <th>Preferred Day</th>
+                        <th>Current Delivery Date</th>
                         <th>Assign Delivery Date</th>
                         <th>Notes</th>
                         <th>Invoice #</th>
-                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -2963,6 +2758,7 @@ function renderUndeliveredOrders(searchQuery = '') {
                 <td>${escapeHtml(formatBottleBreakdown(order))}</td>
                 <td>${getOrderTotalBottles(order)}</td>
                 <td>${escapeHtml(preferredDay)}</td>
+                <td>${currentDeliveryDate ? formatDate(currentDeliveryDate) : '<span class="no-date">No date</span>'}</td>
                 <td>
                     <input 
                         type="date" 
@@ -2975,16 +2771,6 @@ function renderUndeliveredOrders(searchQuery = '') {
                 </td>
                 <td class="notes-cell">${escapeHtml(notes)}</td>
                 <td>${escapeHtml(invoiceNumber)}</td>
-                <td>
-                    <button 
-                        type="button" 
-                        class="btn-delete-order" 
-                        onclick="event.stopPropagation(); deleteOrder('${order.id}');"
-                        title="Remove Order"
-                    >
-                        🗑️
-                    </button>
-                </td>
             </tr>
         `;
     });
@@ -2999,61 +2785,6 @@ function renderUndeliveredOrders(searchQuery = '') {
     `;
     
     container.innerHTML = html;
-}
-
-// Delete an order
-async function deleteOrder(orderId) {
-    const orders = getOrders();
-    const order = orders.find(o => o.id === orderId);
-    
-    if (!order) {
-        alert('Order not found');
-        return;
-    }
-    
-    const customer = getCustomerById(order.customerId);
-    const customerName = customer ? customer.name : 'Unknown';
-    
-    // Confirm deletion
-    if (!confirm(`Are you sure you want to remove this order for ${customerName}?\n\nThis will permanently delete the order. This action cannot be undone.`)) {
-        return;
-    }
-    
-    try {
-        // If order is assigned to a run, remove it from the run
-        if (order.runId) {
-            const runs = getRuns();
-            const run = runs.find(r => r.id === order.runId);
-            if (run && run.orderIds) {
-                run.orderIds = run.orderIds.filter(id => id !== orderId);
-                await saveRun(run);
-            }
-        }
-        
-        // Delete the order from Firestore
-        await deleteDocument('orders', orderId);
-        
-        // Show success message
-        showMessage('Order removed successfully', 'success');
-        
-        // Refresh the display (real-time listener will handle this, but refresh immediately for better UX)
-        const searchQuery = document.getElementById('undelivered-search')?.value || '';
-        renderUndeliveredOrders(searchQuery);
-        
-        // Refresh run builder if visible
-        const runDate = document.getElementById('run-date')?.value;
-        if (runDate) {
-            renderRunBuilder(runDate);
-        }
-        
-        // Refresh stock count
-        if (typeof renderStockCount === 'function') {
-            renderStockCount();
-        }
-    } catch (error) {
-        console.error('Error deleting order:', error);
-        alert('Error removing order: ' + error.message);
-    }
 }
 
 // Open edit order modal
@@ -3687,72 +3418,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     
     // Focus on search input when page loads
-    // (deferred until user selects Enter Gas Bottle from main menu)
-    
-    // ============================================
-    // MAIN MENU NAVIGATION
-    // ============================================
-    
-    const mainMenu = document.getElementById('main-menu');
-    const appWorkspace = document.getElementById('app-workspace');
-    const enterGasBottleBtn = document.getElementById('enter-gas-bottle-btn');
-    const checkManifestBtn = document.getElementById('check-manifest-btn');
-    const searchCustomerBtn = document.getElementById('search-customer-btn');
-    const backToMenuBtn = document.getElementById('back-to-menu-btn');
-    
-    function showMainMenu() {
-        if (mainMenu) mainMenu.style.display = 'block';
-        if (appWorkspace) {
-            appWorkspace.style.display = 'none';
-            appWorkspace.classList.remove('mode-entry', 'mode-manifest', 'mode-search');
-        }
-    }
-    
-    function showAppWorkspace(mode) {
-        if (mainMenu) mainMenu.style.display = 'none';
-        if (appWorkspace) {
-            appWorkspace.style.display = 'block';
-            appWorkspace.classList.remove('mode-entry', 'mode-manifest', 'mode-search');
-            if (mode) appWorkspace.classList.add(`mode-${mode}`);
-        }
-    }
-    
-    function switchToStaffTab(tabName) {
-        document.querySelectorAll('.staff-tab').forEach(t => {
-            t.classList.toggle('active', t.dataset.tab === tabName);
-        });
-        document.querySelectorAll('.staff-tab-content').forEach(content => {
-            content.classList.remove('active');
-        });
-        document.getElementById(`tab-${tabName}`)?.classList.add('active');
-        
-        if (tabName === 'undelivered') {
-            renderUndeliveredOrders();
-        } else if (tabName === 'generated-runs') {
-            renderGeneratedRuns();
-        } else if (tabName === 'daily-view') {
-            const today = new Date().toISOString().split('T')[0];
-            const dateInput = document.getElementById('daily-view-date');
-            if (dateInput) {
-                dateInput.value = today;
-                renderWeeklyOverview(new Date());
-                renderDailyView(today);
-            }
-        } else if (tabName === 'run-builder') {
-            const today = new Date().toISOString().split('T')[0];
-            const dateInput = document.getElementById('run-date');
-            if (dateInput) {
-                dateInput.value = today;
-                renderRunBuilder(today);
-            }
-        } else if (tabName === 'stock-count') {
-            renderStockCount();
-        } else if (tabName === 'customer-history') {
-            renderCustomerHistory();
-        }
-    }
-    
-    window.showMainMenu = showMainMenu;
+    searchInput.focus();
     
     // ============================================
     // MAIN VIEW TOGGLE (CUSTOMER / STAFF)
@@ -3835,6 +3501,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     const newStaffBtn = staffViewBtn.cloneNode(true);
     staffBtnParent.replaceChild(newStaffBtn, staffViewBtn);
     
+    // Set initial active state (Customer view is default)
+    newCustomerBtn.classList.add('active');
+    newStaffBtn.classList.remove('active');
+    
     // Attach event listeners to the new nodes
     newCustomerBtn.addEventListener('click', (e) => {
         e.preventDefault();
@@ -3846,27 +3516,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         e.preventDefault();
         e.stopPropagation();
         switchToStaffView();
-    });
-    
-    enterGasBottleBtn?.addEventListener('click', () => {
-        showAppWorkspace('entry');
-        switchToCustomerView();
-    });
-    
-    checkManifestBtn?.addEventListener('click', () => {
-        showAppWorkspace('manifest');
-        switchToStaffView();
-        switchToStaffTab('undelivered');
-    });
-
-    searchCustomerBtn?.addEventListener('click', () => {
-        showAppWorkspace('search');
-        switchToStaffView();
-        switchToStaffTab('customer-history');
-    });
-    
-    backToMenuBtn?.addEventListener('click', () => {
-        showMainMenu();
     });
     
     // Make functions globally available for debugging
@@ -3940,12 +3589,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Run builder date change
     document.getElementById('run-date')?.addEventListener('change', (e) => {
         renderRunBuilder(e.target.value);
-    });
-
-    // Manifest builder search
-    document.getElementById('manifest-builder-search')?.addEventListener('input', () => {
-        const runDate = document.getElementById('run-date')?.value;
-        renderRunBuilder(runDate);
     });
     
     // CSV Export buttons
@@ -4099,9 +3742,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     customerHistorySearchInput?.addEventListener('input', (e) => {
         renderCustomerHistory(e.target.value);
     });
-    
-    // Show main menu on load (user picks an action after login)
-    showMainMenu();
     
     }
     
